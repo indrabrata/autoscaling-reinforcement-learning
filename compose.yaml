@@ -1,0 +1,20 @@
+name: "influxdb"
+
+services:
+  influxdb2:
+    image: influxdb:2.7
+    container_name: influxdb2
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb2-data:/var/lib/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=influxdb
+      - DOCKER_INFLUXDB_INIT_PASSWORD=influxdb123
+      - DOCKER_INFLUXDB_INIT_ORG=icn
+      - DOCKER_INFLUXDB_INIT_BUCKET=metrics
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-token
+
+volumes:
+  influxdb2-data:

@@ -4,7 +4,7 @@ import signal
 
 import numpy as np
 
-from ..influxdb.influx import InfluxDB
+from ..influxdb.influxdb import InfluxDB
 from .agent import QLearningAgent
 from .environment import KubernetesEnv, setup_logger
 

@@ -2,7 +2,7 @@ import logging
 import os
 from datetime import datetime
 
-from influxdb_client import InfluxDBClient, Point, WriteOptions
+from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
 from ..model.environment.utils.logger import setup_logger

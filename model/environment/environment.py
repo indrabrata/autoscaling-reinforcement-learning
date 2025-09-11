@@ -3,8 +3,7 @@ from typing import Optional
 
 from kubernetes import client, config
 
-from influxdb.influx import InfluxDB
-
+from ...influxdb.influxdb import InfluxDB
 from .utils import get_metrics, get_response_time, wait_for_pods_ready
 
 
