@@ -2,8 +2,9 @@ import atexit
 import signal
 
 import numpy as np
-from agent import QLearningAgent
-from environment import KubernetesEnv, setup_logger
+
+from .agent import QLearningAgent
+from .environment import KubernetesEnv, setup_logger
 
 logger = setup_logger("kubernetes_agent", log_level="INFO", log_to_file=True)
 
