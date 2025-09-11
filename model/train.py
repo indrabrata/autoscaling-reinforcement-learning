@@ -1,8 +1,10 @@
 import atexit
+import os
 import signal
 
 import numpy as np
 
+from ..influxdb.influx import InfluxDB
 from .agent import QLearningAgent
 from .environment import KubernetesEnv, setup_logger
 
@@ -27,6 +29,12 @@ def train_agent(
     checkpoint_interval=5,
 ):
     """Train the Q-learning agent on the Kubernetes environment"""
+    influxUrl = os.getenv("INFLUX_URL")
+    influxToken = os.getenv("INFLUX_TOKEN")
+    influxOrg = os.getenv("INFLUX_ORG")
+    influxBucket = os.getenv("INFLUX_BUCKET") 
+    
+    influxdb = InfluxDB(url=influxUrl, token=influxToken, org=influxOrg, bucket=influxBucket)
     env = KubernetesEnv(
         min_replicas=min_replicas,
         max_replicas=max_replicas,
@@ -40,6 +48,7 @@ def train_agent(
         timeout=timeout,
         verbose=verbose,
         logger=logger,
+        influxdb=influxdb
     )
 
     agent = QLearningAgent(

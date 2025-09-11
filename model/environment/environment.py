@@ -3,6 +3,8 @@ from typing import Optional
 
 from kubernetes import client, config
 
+from influxdb.influx import InfluxDB
+
 from .utils import get_metrics, get_response_time, wait_for_pods_ready
 
 
@@ -21,6 +23,7 @@ class KubernetesEnv:
         timeout: int = 60,
         verbose: bool = False,
         logger: Optional[Logger] = None,
+        influxdb: Optional[InfluxDB] = None,
     ):
         self.logger = logger
         config.load_kube_config()
@@ -40,6 +43,7 @@ class KubernetesEnv:
         self.max_memory = max_memory
         self.verbose = verbose
         self.timeout = timeout
+        self.influxdb = influxdb
 
         self.action_space = list(range(101))
 
@@ -62,13 +66,20 @@ class KubernetesEnv:
         )
 
     def scale_and_get_metrics(self):
-        self.scale()
         ready, desired_replicas, ready_replicas = wait_for_pods_ready(
             cluster=self.cluster,
             deployment_name=self.deployment_name,
             namespace=self.namespace,
             timeout=self.timeout,
         )
+
+        if not ready:
+            self.logger.warning(
+                f"Pods are not ready, {ready_replicas}/{desired_replicas} ready"
+            )        
+        
+        
+        self.scale()
         self.cpu_usage, self.memory_usage, self.replica = get_metrics(
             replicas=ready_replicas,
             timeout=self.timeout,
@@ -77,13 +88,25 @@ class KubernetesEnv:
             api=self.api,
             core=self.core,
         )
-
+        
+        
         self.response_time = get_response_time()
+        self.influxdb.write_point(
+            measurement="autoscaler_metrics",
+            tags={
+                "deployment": self.deployment_name,
+                "namespace": self.namespace,
+                "cluster": self.cluster
+            },
+            fields={
+                "cpu_usage": self.cpu_usage,
+                "memory_usage": self.memory_usage,
+                "replicas": self.replica,
+                "response_time": self.response_time,
+            }
+        )
 
-        if not ready:
-            self.logger.warning(
-                f"Pods are not ready, {ready_replicas}/{desired_replicas} ready"
-            )
+
 
     def get_observation(self):
         return {
