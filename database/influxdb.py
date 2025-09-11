@@ -1,11 +1,10 @@
 import logging
-import os
 from datetime import datetime
 
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
-from ..model.environment.utils.logger import setup_logger
+from utils import setup_logger
 
 
 class InfluxDB:
@@ -22,7 +21,7 @@ class InfluxDB:
         self.token = token
         self.org = org
         self.bucket = bucket
-        self.logger = setup_logger("influx", "INFO", True, "logs")
+        self.logger = setup_logger("influxdb", "INFO", True, "logs")
 
         try:
             self.client = InfluxDBClient(url=url, token=token, org=org)
@@ -47,16 +46,13 @@ class InfluxDB:
 
             point = Point(measurement)
 
-            # Add tags
             if tags:
                 for k, v in tags.items():
                     point = point.tag(k, str(v))
 
-            # Add fields
             for k, v in fields.items():
                 point = point.field(k, v)
 
-            # Add timestamp
             if timestamp:
                 point = point.time(timestamp)
 

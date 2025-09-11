@@ -1,15 +1,20 @@
+
 import atexit
 import os
 import signal
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import numpy as np
 
-from ..influxdb.influxdb import InfluxDB
-from .agent import QLearningAgent
-from .environment import KubernetesEnv, setup_logger
+from database import InfluxDB
+from environment import KubernetesEnv
+from model import QLearningAgent
+from utils import setup_logger
 
 logger = setup_logger("kubernetes_agent", log_level="INFO", log_to_file=True)
-
 
 def train_agent(
     min_replicas=1,
@@ -29,7 +34,10 @@ def train_agent(
     checkpoint_interval=5,
 ):
     """Train the Q-learning agent on the Kubernetes environment"""
-    influxUrl = os.getenv("INFLUX_URL")
+    influxHost = os.getenv("INFLUX_HOST")
+    influxPort = os.getenv("INFLUX_PORT")
+    influxUrl = f"{influxHost}:{influxPort}"
+    
     influxToken = os.getenv("INFLUX_TOKEN")
     influxOrg = os.getenv("INFLUX_ORG")
     influxBucket = os.getenv("INFLUX_BUCKET") 

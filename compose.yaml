@@ -8,13 +8,15 @@ services:
       - "8086:8086"
     volumes:
       - influxdb2-data:/var/lib/influxdb2
+    env_file:
+      - .env
     environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=influxdb
-      - DOCKER_INFLUXDB_INIT_PASSWORD=influxdb123
-      - DOCKER_INFLUXDB_INIT_ORG=icn
-      - DOCKER_INFLUXDB_INIT_BUCKET=metrics
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-token
+      - DOCKER_INFLUXDB_INIT_MODE=${INFLUX_INIT_MODE}
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_USERNAME}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUX_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUX_BUCKET}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_TOKEN}
 
 volumes:
   influxdb2-data:
