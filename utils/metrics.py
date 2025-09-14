@@ -1,7 +1,9 @@
 import logging
+import os
 import time
 
 import numpy as np
+import requests
 from kubernetes.client.api import CoreV1Api, CustomObjectsApi
 
 from .helper import parse_cpu_value, parse_memory_value
@@ -156,3 +158,30 @@ def get_metrics(
 
 def get_response_time():
     return np.random.randint(50, 300)
+
+
+PROM_URL = os.environ.get("PROM_URL") or "http://<host>:<port>"  # set to node-ip:30090 when using NodePort
+
+def get_response_time_prometheus(quantile: float = 0.95, window: str = "1m") -> float | None:
+    """
+    Returns response time in milliseconds (float) using histogram_quantile over nginx ingress metric.
+    If no data, returns None.
+    """
+    # histogram_quantile returns seconds (ingress-nginx uses seconds)
+    query = (
+        f'histogram_quantile({quantile}, '
+        f'sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[{window}])) by (le))'
+    )
+    try:
+        resp = requests.get(f"{PROM_URL}/api/v1/query", params={"query": query}, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        if data["status"] != "success" or not data["data"]["result"]:
+            logging.debug("Prometheus query returned no result")
+            return None
+        value = float(data["data"]["result"][0]["value"][1])
+        # convert seconds -> milliseconds
+        return value * 1000.0
+    except Exception as e:
+        logging.warning(f"Failed to query Prometheus at {PROM_URL}: {e}")
+        return None
