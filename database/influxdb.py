@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime
+from typing import Optional
 
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
-
 from utils import setup_logger
 
 
@@ -21,7 +21,7 @@ class InfluxDB:
         self.token = token
         self.org = org
         self.bucket = bucket
-        self.logger = setup_logger("influxdb", "INFO", True, "logs")
+        self.logger = setup_logger("influx", "INFO", True, "logs")
 
         try:
             self.client = InfluxDBClient(url=url, token=token, org=org)
@@ -31,7 +31,13 @@ class InfluxDB:
             logging.error("Failed to connect to InfluxDB: %s", e)
             raise
 
-    def write_point(self, measurement, tags: dict, fields: dict, timestamp: datetime = None):
+    def write_point(
+        self,
+        measurement,
+        tags: dict,
+        fields: dict,
+        timestamp: Optional[datetime] = None,
+    ):
         """
         Write a single point into InfluxDB.
         Args
@@ -57,7 +63,9 @@ class InfluxDB:
                 point = point.time(timestamp)
 
             self.write_api.write(bucket=self.bucket, org=self.org, record=point)
-            self.logger.info("Data written: %s | tags=%s | fields=%s", measurement, tags, fields)
+            self.logger.info(
+                "Data written: %s | tags=%s | fields=%s", measurement, tags, fields
+            )
 
         except Exception as e:
             self.logger.error("Failed to write point: %s", e)
@@ -66,4 +74,3 @@ class InfluxDB:
         """Close the client connection."""
         self.client.close()
         self.logger.info("InfluxDB connection closed.")
-

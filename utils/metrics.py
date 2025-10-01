@@ -1,10 +1,9 @@
 import logging
-import os
 import time
 
 import numpy as np
-import requests
 from kubernetes.client.api import CoreV1Api, CustomObjectsApi
+from prometheus_api_client import PrometheusApiClientException, PrometheusConnect
 
 from .helper import parse_cpu_value, parse_memory_value
 
@@ -99,6 +98,7 @@ def get_metrics(
     timeout: int,
     namespace: str,
     deployment_name: str,
+    wait_time: int,
     api: CustomObjectsApi,
     core: CoreV1Api,
 ) -> tuple[float, float, int]:
@@ -106,12 +106,11 @@ def get_metrics(
     Returns (cpu_usage_mean, memory_usage_mean, replica_count)
     cpu in %, memory in %, averaged over matched pods.
     """
-    counter = 0
-    cpu_usage = []
-    memory_usage = []
+    if wait_time > 0:
+        time.sleep(wait_time)
 
-    while counter < timeout:
-        counter += 1
+    start = time.time()
+    while time.time() - start < timeout:
         metric_data = fetch_metrics(api, namespace)
         if not metric_data:
             time.sleep(1)
@@ -128,7 +127,9 @@ def get_metrics(
             time.sleep(1)
             continue
 
+        cpu_vals, mem_vals = [], []
         collected = 0
+
         for item in target_metric_items:
             pod_name = item["metadata"]["name"]
             pod_obj = pod_spec_by_name.get(pod_name)
@@ -137,51 +138,85 @@ def get_metrics(
                 continue
 
             cpu_pct, mem_pct = calculate_usage(item, pod_obj)
-            cpu_usage.append(cpu_pct)
-            memory_usage.append(mem_pct)
+            cpu_vals.append(cpu_pct)
+            mem_vals.append(mem_pct)
             collected += 1
             if collected >= replicas:
                 break
 
         if collected >= replicas:
-            break
+            cpu_mean = float(np.nanmean(cpu_vals)) if cpu_vals else 0.0
+            mem_mean = float(np.nanmean(mem_vals)) if mem_vals else 0.0
+            return cpu_mean, mem_mean, collected
 
         time.sleep(1)
 
-    cpu_vals = np.array(cpu_usage, dtype=float)
-    mem_vals = np.array(memory_usage, dtype=float)
-    cpu_mean = float(np.nanmean(cpu_vals)) if np.any(~np.isnan(cpu_vals)) else 0.0
-    mem_mean = float(np.nanmean(mem_vals)) if np.any(~np.isnan(mem_vals)) else 0.0
-
-    return cpu_mean, mem_mean, len(cpu_usage)
+    return 0.0, 0.0, 0
 
 
-def get_response_time():
-    return np.random.randint(50, 300)
+def get_response_time(
+    prometheus: PrometheusConnect,
+    app: str,
+    namespace: str = "default",
+    endpoints_method: list[tuple[str, str]] = (("/", "GET"), ("/docs", "GET")),
+    interval: int = 15,
+    quantile: float = 0.90,
+) -> float:
+    result = []
+    time.sleep(10)
+    for endpoint, method in endpoints_method:
+        q = f"""
+            1000 *
+            histogram_quantile(
+            {quantile},
+            sum by (le) (
+                rate(app_request_latency_seconds_bucket{{
+                job="{app}",
+                namespace="{namespace}",
+                method="{method}",
+                exported_endpoint="{endpoint}"
+                }}[{interval}s])
+            )
+            )
 
+        """
+        try:
+            prometheus.check_prometheus_connection()
+        except Exception as e:
+            logging.warning(f"Prometheus connectivity issue: {e}")
+            return 0.0
+        try:
+            response = prometheus.custom_query(q)
+            if response:
+                for res in response:
+                    if "value" in res and len(res["value"]) > 1:
+                        result.append(float(res["value"][1]))
+                    else:
+                        result.append(0.0)
+            else:
+                response = 0.0
+                result.append(response)
+        except PrometheusApiClientException as e:
+            if "404 page not found" in str(e):
+                logging.warning(
+                    f"Prometheus custom query returned 404 for app={app}, "
+                    f"namespace={namespace}, endpoint={endpoint}, "
+                    f"method={method}. Error: {e}"
+                )
+                result.append(0.0)
+            else:
+                logging.error(
+                    f"Prometheus custom query failed for app={app}, "
+                    f"namespace={namespace}, endpoint={endpoint}, "
+                    f"method={method}. Error: {e}"
+                )
+                result.append(0.0)
+        except Exception as e:
+            logging.error(
+                f"Prometheus custom query failed for app={app}, "
+                f"namespace={namespace}, endpoint={endpoint}, "
+                f"method={method}. Error: {e}"
+            )
+            result.append(0.0)
 
-PROM_URL = os.environ.get("PROM_URL") or "http://<host>:<port>"  # set to node-ip:30090 when using NodePort
-
-def get_response_time_prometheus(quantile: float = 0.95, window: str = "1m") -> float | None:
-    """
-    Returns response time in milliseconds (float) using histogram_quantile over nginx ingress metric.
-    If no data, returns None.
-    """
-    # histogram_quantile returns seconds (ingress-nginx uses seconds)
-    query = (
-        f'histogram_quantile({quantile}, '
-        f'sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[{window}])) by (le))'
-    )
-    try:
-        resp = requests.get(f"{PROM_URL}/api/v1/query", params={"query": query}, timeout=5)
-        resp.raise_for_status()
-        data = resp.json()
-        if data["status"] != "success" or not data["data"]["result"]:
-            logging.debug("Prometheus query returned no result")
-            return None
-        value = float(data["data"]["result"][0]["value"][1])
-        # convert seconds -> milliseconds
-        return value * 1000.0
-    except Exception as e:
-        logging.warning(f"Failed to query Prometheus at {PROM_URL}: {e}")
-        return None
+    return float(np.mean(result)) if result else 0.0

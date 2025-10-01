@@ -1,5 +1,5 @@
 run:
-	python -m model.train
+	python train.py
 
 compose-dev:
 	docker compose -f compose.yaml up -d
