@@ -1,14 +1,10 @@
 import ast
 import json
-import logging
+from logging import Logger
 from typing import Iterable, List, Tuple, Union
 
-import numpy as np
-import torch
-from rl import QLearning
 
-
-def parse_cpu_value(cpu_str: str) -> float:
+def parse_cpu_value(cpu_str: str, logger: Logger) -> float:
     """Parse CPU value from kubernetes format to cores (float)"""
     try:
         if cpu_str.endswith("m"):
@@ -19,11 +15,11 @@ def parse_cpu_value(cpu_str: str) -> float:
             return float(cpu_str[:-1]) / 1000000
         return float(cpu_str)
     except (ValueError, IndexError) as e:
-        logging.warning(f"Could not parse CPU value '{cpu_str}': {e}")
+        logger.warning(f"Could not parse CPU value '{cpu_str}': {e}")
         return 0.0
 
 
-def parse_memory_value(memory_str: str) -> float:
+def parse_memory_value(memory_str: str, logger: Logger) -> float:
     """Parse memory value from kubernetes format to MB (float)"""
     try:
         if memory_str.endswith("Ki"):
@@ -36,50 +32,8 @@ def parse_memory_value(memory_str: str) -> float:
             return float(memory_str[:-2]) * 1024 * 1024
         return float(memory_str) / (1024 * 1024)
     except (ValueError, IndexError) as e:
-        logging.warning(f"Could not parse memory value '{memory_str}': {e}")
+        logger.warning(f"Could not parse memory value '{memory_str}': {e}")
         return 0.0
-
-
-def log_verbose_details(observation, agent: QLearning, verbose, logger):
-    """Log detailed observation and Q-value information if verbose mode is enabled"""
-    if not verbose:
-        return
-
-    logger.info("  🔍 Observation:")
-    logger.info(f"     CPU: {observation.get('cpu_usage', 0):.1f}%")
-    logger.info(f"     Memory: {observation.get('memory_usage', 0):.1f}%")
-    logger.info(f"     Response Time: {observation.get('response_time', 0):.1f}ms")
-    logger.info(f"     Last Action: {observation.get('last_action', 'N/A')}")
-
-    state_key = agent.get_state_key(observation)
-    logger.info(f"  🗝️  State Key: {state_key}")
-
-    if agent.__class__.__name__ == "DQN":
-        logger.info("  🧠 Mode: DQN (neural network)")
-        try:
-            with torch.no_grad():
-                state_tensor = torch.from_numpy(state_key).unsqueeze(0).to(agent.device)
-                q_values = agent.policy_net(state_tensor).squeeze(0)
-                max_q = torch.max(q_values).item()
-                best_action = (
-                    torch.argmax(q_values).item() + 1
-                )  # Convert to 1-100 range
-                logger.info(
-                    f"  🧠 Q-Values: Max={max_q:.3f}, Best Action={best_action}"
-                )
-        except Exception as e:
-            logger.info(f"  🧠 Could not compute Q-values: {e}")
-    # For Q-table mode, state_key is a tuple
-    elif state_key in agent.q_table:
-        if state_key in agent.q_table:
-            q_values = agent.q_table[state_key]
-            max_q = np.max(q_values)
-            best_action = np.argmax(q_values) + 1  # Convert to 1-100 range
-            logger.info(f"  🧠 Q-Values: Max={max_q:.3f}, Best Action={best_action}")
-        else:
-            logger.info("  🧠 State not in Q-table yet")
-
-    logger.info("----------------------------------------")
 
 
 def normalize_endpoints(

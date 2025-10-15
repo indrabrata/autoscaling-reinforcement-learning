@@ -20,5 +20,4 @@ checkpoints/
 # Env
 .env
 
-# InfluxDB
-.influxdb3
+.ropenproject

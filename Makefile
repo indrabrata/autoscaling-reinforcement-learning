@@ -1,5 +1,5 @@
 run:
-	python train.py
+	uv run train.py
 
 compose-dev:
 	docker compose -f compose.yaml up -d

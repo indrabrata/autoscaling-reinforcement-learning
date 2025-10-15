@@ -1,6 +1,5 @@
 from typing import Dict
 
-
 class Fuzzy:
     """
     Fuzzy Logic module for autoscaling decisions.

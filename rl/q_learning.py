@@ -55,14 +55,10 @@ class QLearning:
             self.q_table[state_key] = np.zeros(self.n_actions)
 
         if np.random.rand() < self.epsilon:
-            return np.random.randint(
-                0, self.n_actions
-            )  # Exploration and Exploitation
+            return np.random.randint(0, self.n_actions)  # Exploration and Exploitation
         return np.argmax(self.q_table[state_key])
 
-    def update_q_table(
-        self, observation: dict, action: int, reward: float, next_observation: dict
-    ):
+    def update_q_table(self, observation: dict, action: int, reward: float, next_observation: dict):
         """Update Q-table using Q-learning algorithm"""
         state_key = self.get_state_key(observation)
         next_state_key = self.get_state_key(next_observation)
@@ -76,11 +72,8 @@ class QLearning:
             self.q_table[next_state_key]
         )  # Ini rumus Q Learning, jika sarsa akan memanggil fungsi get_action()
         self.q_table[state_key][action] += self.learning_rate * (
-            reward
-            + self.discount_factor * best_next_action
-            - self.q_table[state_key][action]
+            reward + self.discount_factor * best_next_action - self.q_table[state_key][action]
         )
-
 
     """
     # Q(S,A) [Reward sebelumnya yang sudah tercatat di Q table]
@@ -94,7 +87,7 @@ class QLearning:
     # (S`,A`) [State dan action pada step berikutnya dari state(observation) yang sekarang]
 
     # -Q(S,A) [Untuk mengurangi pengaruh reward sebelumnya yang sudah tercatat di Q table] lebih stabil
-    """ 
+    """
 
     def save_model(self, filepath: str, episode_count: int = 0):
         """Save Q-table and parameters to file"""
