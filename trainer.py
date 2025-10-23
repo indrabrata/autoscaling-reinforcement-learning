@@ -44,7 +44,9 @@ class Trainer:
                     self.logger.info(f"Epsilon reset to {self.agent.epsilon}")
                 if change_epsilon_decay is not None:
                     self.agent.epsilon_decay = change_epsilon_decay
-                    self.logger.info(f"Epsilon decay changed to {self.agent.epsilon_decay}")
+                    self.logger.info(
+                        f"Epsilon decay changed to {self.agent.epsilon_decay}"
+                    )
             except Exception as e:
                 self.logger.error(f"Failed to load model from {resume_path}: {e}")
                 raise
@@ -54,12 +56,16 @@ class Trainer:
             self.logger.warning("⚠️ Nothing to save yet.")
             return None
 
-        ext = ".pth" if getattr(self.agent, "agent_type", "").upper() == "DQN" else ".pkl"
+        ext = (
+            ".pth" if getattr(self.agent, "agent_type", "").upper() == "DQN" else ".pkl"
+        )
         model_type = (
-            "dqn" if getattr(self.agent, "agent_type", "").upper() == "DQN" else "qlearning"
+            "dqn"
+            if getattr(self.agent, "agent_type", "").upper() == "DQN"
+            else "qlearning"
         )
         interrupted_dir = Path(
-            f"model/{model_type}/{self.savecfg.note}_{self.savecfg.start_time}/interrupted"
+            f"model/{model_type}/{self.savecfg.start_time}_{self.savecfg.note}/interrupted"
         )
         interrupted_dir.mkdir(parents=True, exist_ok=True)
 
@@ -99,12 +105,15 @@ class Trainer:
     def train(self, episodes: int, note: str, start_time: int) -> None:
         self.savecfg = SaveConfig(note=note, start_time=start_time)
         self._install_signal_handlers()
+            
         try:
             total_best = float("-inf")
             for ep in range(episodes):
                 self.agent.add_episode_count()
                 self.logger.info(f"\nEpisode {ep + 1}/{episodes}")
-                self.logger.info(f"Total episodes trained: {self.agent.episodes_trained}")
+                self.logger.info(
+                    f"Total episodes trained: {self.agent.episodes_trained}"
+                )
 
                 obs = self.env.reset()
                 total = 0.0
@@ -144,13 +153,19 @@ class Trainer:
             self._restore_signal_handlers()
             self.logger.info("Training finished (cleanup done).")
 
-    def _save_checkpoint(self, episode: int, score: float, note: str, start_time: int) -> None:
-        ext = ".pth" if getattr(self.agent, "agent_type", "").upper() == "DQN" else ".pkl"
+    def _save_checkpoint(
+        self, episode: int, score: float, note: str, start_time: int
+    ) -> None:
+        ext = (
+            ".pth" if getattr(self.agent, "agent_type", "").upper() == "DQN" else ".pkl"
+        )
         model_type = (
-            "dqn" if getattr(self.agent, "agent_type", "").upper() == "DQN" else "qlearning"
+            "dqn"
+            if getattr(self.agent, "agent_type", "").upper() == "DQN"
+            else "qlearning"
         )
         path = (
-            f"model/{model_type}/{note}_{start_time}/checkpoints/"
+            f"model/{model_type}/{start_time}_{note}/checkpoints/"
             f"episode_{episode}_total_{score}{ext}"
         )
         Path(path).parent.mkdir(parents=True, exist_ok=True)

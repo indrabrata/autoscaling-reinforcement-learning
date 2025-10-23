@@ -62,7 +62,9 @@ class InfluxDB:
                 point = point.time(timestamp)
 
             self.write_api.write(bucket=self.bucket, org=self.org, record=point)
-            self.logger.info("Data written: %s | tags=%s | fields=%s", measurement, tags, fields)
+            self.logger.info(
+                "Data written: %s | tags=%s | fields=%s", measurement, tags, fields
+            )
 
         except Exception as e:
             self.logger.error("Failed to write point: %s", e)

@@ -38,6 +38,7 @@ if __name__ == "__main__":
         logger.warning("Invalid METRICS_ENDPOINTS_METHOD format, using default")
         metrics_endpoints_method = [["/", "GET"], ["/docs", "GET"]]
 
+    choose_algorithm = os.getenv("ALGORITHM", "Q").upper()
     env = KubernetesEnv(
         min_replicas=int(os.getenv("MIN_REPLICAS", "1")),
         max_replicas=int(os.getenv("MAX_REPLICAS", "12")),
@@ -58,9 +59,13 @@ if __name__ == "__main__":
         metrics_endpoints_method=metrics_endpoints_method,
         metrics_interval=int(os.getenv("METRICS_INTERVAL", "15")),
         metrics_quantile=float(os.getenv("METRICS_QUANTILE", "0.90")),
+        max_scaling_retries=int(os.getenv("MAX_SCALING_RETRIES", "1000")),
+        response_time_weight=float(os.getenv("RESPONSE_TIME_WEIGHT", "1.0")),
+        cpu_memory_weight=float(os.getenv("CPU_MEMORY_WEIGHT", "0.5")),
+        cost_weight=float(os.getenv("COST_WEIGHT", "0.3")),
+        algorithm=choose_algorithm
     )
 
-    choose_algorithm = os.getenv("ALGORITHM", "Q").upper()
     if choose_algorithm == "Q":
         algorithm = QLearning(
             learning_rate=float(os.getenv("LEARNING_RATE", None)),
@@ -69,6 +74,8 @@ if __name__ == "__main__":
             epsilon_decay=float(os.getenv("EPSILON_DECAY", None)),
             epsilon_min=float(os.getenv("EPSILON_MIN", None)),
             created_at=start_time,
+            logger=logger,
+            agent_type="Q"
         )
     elif choose_algorithm == "Q-FUZZY":
         algorithm = QFuzzyHybrid(
@@ -78,7 +85,7 @@ if __name__ == "__main__":
             epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.99)),
             epsilon_min=float(os.getenv("EPSILON_MIN", 0.01)),
             created_at=start_time,
-            fuzzy_weight=float(os.getenv("FUZZY_WEIGHT", 0.3)),
+            logger=logger,   
         )
     else:
         raise ValueError(f"Unsupported algorithm: {choose_algorithm}")
@@ -114,7 +121,7 @@ if __name__ == "__main__":
         logger.info("\nDQN model trained (no Q-table to display)")
 
     model_type = "dqn" if trainer.agent.agent_type.upper() == "DQN" else "qlearning"
-    model_dir = Path(f"model/{model_type}/{note}_{start_time}/final")
+    model_dir = Path(f"model/{model_type}/{start_time}_{note}/final")
     model_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = int(time.time())

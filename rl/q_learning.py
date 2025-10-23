@@ -1,6 +1,7 @@
-import logging
 import pickle
+from logging import Logger
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import urllib3
@@ -17,6 +18,7 @@ class QLearning:
         epsilon_decay: float = 0.0,
         epsilon_min: float = 0.01,
         created_at: int = 0,
+        logger: Optional[Logger] = None,
     ):
         self.n_actions = 100  # Action dari 0-99 (100 total actions)
         self.agent_type = "Q"
@@ -28,6 +30,10 @@ class QLearning:
         self.created_at = created_at
         self.episodes_trained = 0
         self.q_table = {}
+        self.logger = logger or Logger(__name__)
+
+        self.logger.info("Initialized Q-learning agent")
+        self.logger.info(f"Agent parameters: {self.__dict__}")
 
     def add_episode_count(self, count: int = 1):
         """Increment the episode count"""
@@ -54,11 +60,18 @@ class QLearning:
         if state_key not in self.q_table:
             self.q_table[state_key] = np.zeros(self.n_actions)
 
+        # Choose action based on epsilon-greedy
         if np.random.rand() < self.epsilon:
-            return np.random.randint(0, self.n_actions)  # Exploration and Exploitation
-        return np.argmax(self.q_table[state_key])
+            action = np.random.randint(0, self.n_actions)
+        else:
+            action = np.argmax(self.q_table[state_key])
 
-    def update_q_table(self, observation: dict, action: int, reward: float, next_observation: dict):
+        # REMOVED: Epsilon decay moved to update_q_table() to avoid double decay
+        return action
+
+    def update_q_table(
+        self, observation: dict, action: int, reward: float, next_observation: dict
+    ):
         """Update Q-table using Q-learning algorithm"""
         state_key = self.get_state_key(observation)
         next_state_key = self.get_state_key(next_observation)
@@ -72,8 +85,14 @@ class QLearning:
             self.q_table[next_state_key]
         )  # Ini rumus Q Learning, jika sarsa akan memanggil fungsi get_action()
         self.q_table[state_key][action] += self.learning_rate * (
-            reward + self.discount_factor * best_next_action - self.q_table[state_key][action]
+            reward
+            + self.discount_factor * best_next_action
+            - self.q_table[state_key][action]
         )
+        if self.epsilon > self.epsilon_min:
+            self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+
+    # Q(S,A)←Q(S,A)+α(R+γQ(S′,A′)−Q(S,A))  # noqa: RUF003
 
     """
     # Q(S,A) [Reward sebelumnya yang sudah tercatat di Q table]
@@ -87,7 +106,7 @@ class QLearning:
     # (S`,A`) [State dan action pada step berikutnya dari state(observation) yang sekarang]
 
     # -Q(S,A) [Untuk mengurangi pengaruh reward sebelumnya yang sudah tercatat di Q table] lebih stabil
-    """
+    """  # noqa: E501
 
     def save_model(self, filepath: str, episode_count: int = 0):
         """Save Q-table and parameters to file"""
@@ -103,12 +122,13 @@ class QLearning:
                 "created_at": self.created_at,
                 "episodes_trained": episode_count,
             }
+            # Create directory if it doesn't exist
             Path(filepath).parent.mkdir(parents=True, exist_ok=True)
             with Path(filepath).open("wb") as f:
                 pickle.dump(model_data, f)
-            logging.info(f"Model saved to {filepath}")
+            self.logger.info(f"Model saved to {filepath}")
         except Exception as e:
-            logging.error(f"Failed to save model to {filepath}: {e}")
+            self.logger.error(f"Failed to save model to {filepath}: {e}")
             raise
 
     def load_model(self, filepath: str):
@@ -130,8 +150,8 @@ class QLearning:
             self.created_at = model_data.get("created_at", None)
             self.episodes_trained = model_data.get("episodes_trained", 0)
 
-            logging.info(f"Model loaded from {filepath}")
-            logging.info(f"Q-table size: {len(self.q_table)} states")
+            self.logger.info(f"Model loaded from {filepath}")
+            self.logger.info(f"Q-table size: {len(self.q_table)} states")
         except Exception as e:
-            logging.error(f"Failed to load model from {filepath}: {e}")
+            self.logger.error(f"Failed to load model from {filepath}: {e}")
             raise

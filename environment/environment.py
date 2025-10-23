@@ -2,16 +2,15 @@ import time
 from logging import Logger
 from typing import Optional
 
+from database.influxdb import InfluxDB
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
 from prometheus_api_client import PrometheusConnect
-
-from database.influxdb import InfluxDB
 from utils import get_metrics, wait_for_pods_ready
 
 
 class KubernetesEnv:
-    def __init__(  # noqa: PLR0913
+    def __init__( 
         self,
         min_replicas: int = 1,
         max_replicas: int = 50,
@@ -36,6 +35,10 @@ class KubernetesEnv:
         metrics_interval: int = 15,
         metrics_quantile: float = 0.90,
         max_scaling_retries: int = 1000,
+        response_time_weight: float = 1.0,
+        cpu_memory_weight: float = 0.5,
+        cost_weight: float = 0.3,
+        algorithm: str = "Q"
     ) -> None:
         self.logger = logger
         config.load_kube_config()
@@ -69,13 +72,20 @@ class KubernetesEnv:
         self.max_scaling_retries = max_scaling_retries
 
         self.action_space = list(range(100))
+        self.response_time_weight = response_time_weight
+        self.cpu_memory_weight = cpu_memory_weight
+        self.cost_weight = cost_weight
 
         self.observation_space = {
             "cpu_usage": (0, 100.0),
             "memory_usage": (0, 100.0),
             "response_time": (0, 100.0),
-            "last_action": (0, 99),  # Fixed: should be 0-99, not 1-99
+            "last_action": (0, 99),
         }
+        self.algorithm = algorithm
+
+        self.logger.info("Initialized KubernetesEnv environment")
+        self.logger.info(f"Environment configuration: {self.__dict__}")
 
     def _scale(self) -> None:
         """Scale deployment with persistent retry until success.
@@ -167,17 +177,8 @@ class KubernetesEnv:
         )
 
     def _calculate_reward(self) -> float:
-        # membuat jadi percentage, agar applicable di semua skala SLA
         response_time_percentage = (self.response_time / self.max_response_time) * 100.0
 
-        # Response time penalty only if exceeding 100% of SLA, normalized to ~0..1
-        # 0-100% = no penalty, >100% = increasing penalty
-        resp_pen = min(
-            1.0, max(0.0, (response_time_percentage - 100.0) / 100.0)
-        )  # Cap penalty at 1.0 for stability
-        # max() ensures no negative penalty when response_time < 100% SLA (ReLU-like)
-
-        # Penalti biner: 0 jika dalam batas, 1 jika di luar
         if self.cpu_usage < self.min_cpu:
             cpu_pen = (self.min_cpu - self.cpu_usage) / self.min_cpu
         elif self.cpu_usage > self.max_cpu:
@@ -192,18 +193,29 @@ class KubernetesEnv:
         else:
             mem_pen = 0.0
 
+        # Response time penalty only if exceeding 100% of SLA, normalized to ~0..1
+        # 0-100% = no penalty, >100% = increasing penalty
+        resp_pen = min(
+            self.response_time_weight,
+            max(0.0, (response_time_percentage - 100.0) / 100.0),
+        )  # Cap penalty at 1.0 for stability
+        # max() ensures no negative penalty when response_time < 100% SLA (ReLU-like)
+
+        cpu_mem_pen = self.cpu_memory_weight * (cpu_pen + mem_pen)
+
         cost_pen = (
-            0.1 * (self.replica_state - self.min_replicas) / self.range_replicas
-        )  # Agar menambahkan bias ke minimum pods untuk efisiensi biaya
+            self.cost_weight
+            * (self.replica_state - self.min_replicas)
+            / self.range_replicas
+        )
 
-        # Reward sederhana: mulai dari 1, kurangi penalti
-        reward = 1.0 - resp_pen - 0.5 * (cpu_pen + mem_pen) - cost_pen
+        reward = 1.0 - resp_pen - cpu_mem_pen - cost_pen
 
-        # Clamp agar stabil
         return float(max(min(reward, 1.0), -1.0))
 
     def _scale_and_get_metrics(self) -> None:
         self._scale()
+        increase: int = self.replica_state > self.replica_state_old
         ready, desired_replicas, ready_replicas = wait_for_pods_ready(
             prometheus=self.prometheus,
             deployment_name=self.deployment_name,
@@ -223,6 +235,7 @@ class KubernetesEnv:
                 interval=self.metrics_interval,
                 quantile=self.metrics_quantile,
                 endpoints_method=self.metrics_endpoints_method,
+                increase=increase,
                 logger=self.logger,
             )
         )
@@ -246,11 +259,14 @@ class KubernetesEnv:
     def step(self, action: int) -> tuple[dict[str, float], float, bool, dict]:
         self.last_action = action
 
-        # percentage = action + 1  # Convert 0-99 to 1-100%
-        # ratio = percentage / 100.0
+        # Map discrete action (0-99) to continuous percentage (0.0-1.0)
+        # Action 0 → 0.0 (min_replicas)
+        # Action 99 → 1.0 (max_replicas)
+        # Example: min=1, max=12, action=50 → 50/99≈0.505 → 1+0.505*11≈6.5→7 replicas
         percentage = (
             (action / 99.0) if len(self.action_space) > 1 else 0.0
         )  # Map 0-99 to 0.0-1.0
+        self.replica_state_old = self.replica_state
         self.replica_state = round(self.min_replicas + percentage * self.range_replicas)
         self.replica_state = max(
             self.min_replicas, min(self.replica_state, self.max_replicas)
@@ -275,19 +291,25 @@ class KubernetesEnv:
             "response_time": self.response_time,
             "last_action": self.last_action,
         }
-        self.influxdb.write_point(
-            measurement="autoscaling_metrics",
-            tags={
-                "namespace": self.namespace,
-                "deployment": self.deployment_name,
-                "algorithm": "q",
-            },
-            fields={**info},
-        ) if self.influxdb else None
+        
+        if self.influxdb:
+            self.influxdb.write_point(
+                measurement="autoscaling_metrics",
+                tags={
+                    "namespace": self.namespace,
+                    "deployment": self.deployment_name,
+                    "algorithm": self.algorithm,
+                },
+                fields={**info},
+            )
+            
         return observation, reward, terminated, info
 
     def reset(self) -> dict[str, float]:
         self.iteration = self.initial_iteration
+        self.replica_state_old = (
+            self.replica_state if hasattr(self, "replica_state") else self.min_replicas
+        )
         self.replica_state = self.min_replicas
         self._scale_and_get_metrics()
         self.last_action = 0
