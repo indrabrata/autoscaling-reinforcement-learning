@@ -62,12 +62,13 @@ class Trainer:
             ".pth" if getattr(self.agent, "agent_type", "").upper() == "DQN" else ".pkl"
         )
         
+        agent_type = getattr(self.agent, "agent_type", "").upper()
         model_type = ""
-        if getattr(self.agent, "agent_type", "").upper() == "DQN":
+        if agent_type == "DQN":
             model_type = "dqn"
-        elif getattr(self.agent, "agent_type", "").upper() == "Q":
+        elif agent_type == "Q":
             model_type = "qlearning"
-        elif getattr(self.agent, "agent_type", "").upper() == "Q-FUZZY":
+        elif agent_type == "QFUZZYHYBRID":
             model_type = "qfuzzyhybrid"    
 
         interrupted_dir = Path(
@@ -91,7 +92,6 @@ class Trainer:
         finally:
             signal.signal(signal.SIGINT, self._old_sigint or signal.SIG_DFL)
             signal.signal(signal.SIGTERM, self._old_sigterm or signal.SIG_DFL)
-            # Re-emit to terminate (optional; comment out if you prefer to *not* exit)
             if signum == signal.SIGINT:
                 raise KeyboardInterrupt
             raise SystemExit(0)

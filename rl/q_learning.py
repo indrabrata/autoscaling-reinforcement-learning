@@ -20,7 +20,7 @@ class QLearning:
         created_at: int = 0,
         logger: Optional[Logger] = None,
     ):
-        self.n_actions = 100  # Action dari 0-99 (100 total actions)
+        self.n_actions = 100
         self.agent_type = "Q"
         self.learning_rate = learning_rate
         self.discount_factor = discount_factor
