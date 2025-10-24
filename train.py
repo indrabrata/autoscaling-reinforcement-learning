@@ -51,7 +51,7 @@ if __name__ == "__main__":
         max_memory=int(os.getenv("MAX_MEMORY", "90")),
         max_response_time=float(os.getenv("MAX_RESPONSE_TIME", "100.0")),
         timeout=int(os.getenv("TIMEOUT", "120")),
-        wait_time=int(os.getenv("WAIT_TIME", "1")),
+        wait_time=int(os.getenv("WAIT_TIME", "60")),
         verbose=True,
         logger=logger,
         influxdb=Influxdb,
@@ -84,6 +84,8 @@ if __name__ == "__main__":
             epsilon_start=float(os.getenv("EPSILON_START", 0.1)),
             epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.99)),
             epsilon_min=float(os.getenv("EPSILON_MIN", 0.01)),
+            fuzzy_weight=float(os.getenv("FUZZY_WEIGHT", 0.3)),
+            fuzziness_bandwidth=float(os.getenv("FUZZINESS_BANDWIDTH", 1.0)),
             created_at=start_time,
             logger=logger,   
         )

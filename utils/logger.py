@@ -13,9 +13,6 @@ import numpy as np
 import torch
 from rl import QLearning
 
-# ----------------------------
-# Unicode vs ASCII detection
-# ----------------------------
 if os.name == "nt":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -29,9 +26,6 @@ _BAR_CHAR_FILLED = "█" if _UNICODE_ENABLED else "#"
 _BAR_CHAR_EMPTY = "░" if _UNICODE_ENABLED else "-"
 _ARROW = "▶" if _UNICODE_ENABLED else ">"
 
-# ----------------------------
-# Logger Setup
-# ----------------------------
 def setup_logger(
     service_name: str,
     log_level: str = "INFO",
@@ -52,9 +46,6 @@ def setup_logger(
 
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
-    # ----------------------------
-    # Console handler (UTF-8 safe)
-    # ----------------------------
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
@@ -71,9 +62,6 @@ def setup_logger(
     console_handler.emit = types.MethodType(emit_utf8, console_handler)
     logger.addHandler(console_handler)
 
-    # ----------------------------
-    # File logging (UTF-8 encoded)
-    # ----------------------------
     if log_to_file:
         now = datetime.now().strftime("%Y-%m-%d-%H-%M")
         log_dir_time = Path(log_dir) / now
@@ -92,9 +80,6 @@ def setup_logger(
 
     return logger
 
-# ----------------------------
-# Helper functions
-# ----------------------------
 def _clamp(v: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, v))
 
@@ -131,7 +116,7 @@ def _safe_q_values(
     agent: QLearning, state_key, logger: Logger
 ) -> Tuple[Optional[np.ndarray], Optional[float], Optional[int]]:
     q_table = getattr(agent, "q_table", None)
-    if q_table is not None and len(q_table) > 0 and getattr(agent, "agent_type", "") == "Q":
+    if q_table is not None and len(q_table) > 0 and (getattr(agent, "agent_type", "") == "Q" or getattr(agent, "agent_type", "") == "Q-FUZZY"):
         if isinstance(state_key, np.ndarray):
             state_key = tuple(state_key.flatten())
         if state_key in q_table:
@@ -172,9 +157,6 @@ def _safe_q_values(
 
     return None, None, None
 
-# ----------------------------
-# Verbose logger for RL
-# ----------------------------
 def log_verbose_details(
     observation: Dict[str, Any], agent: Any, verbose: bool, logger: Logger
 ) -> None:

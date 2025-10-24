@@ -92,7 +92,7 @@ class QLearning:
         if self.epsilon > self.epsilon_min:
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
-    # Q(S,A)←Q(S,A)+α(R+γQ(S′,A′)−Q(S,A))  # noqa: RUF003
+    # Q(S,A)←Q(S,A)+α(R+γQ(S′,A′)−Q(S,A))
 
     """
     # Q(S,A) [Reward sebelumnya yang sudah tercatat di Q table]
@@ -106,7 +106,7 @@ class QLearning:
     # (S`,A`) [State dan action pada step berikutnya dari state(observation) yang sekarang]
 
     # -Q(S,A) [Untuk mengurangi pengaruh reward sebelumnya yang sudah tercatat di Q table] lebih stabil
-    """  # noqa: E501
+    """  
 
     def save_model(self, filepath: str, episode_count: int = 0):
         """Save Q-table and parameters to file"""

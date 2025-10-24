@@ -6,6 +6,8 @@ from pathlib import Path
 from types import FrameType
 from typing import Optional
 
+from torch import mode
+
 from environment import KubernetesEnv
 from rl import QLearning
 from utils import log_verbose_details
@@ -59,11 +61,15 @@ class Trainer:
         ext = (
             ".pth" if getattr(self.agent, "agent_type", "").upper() == "DQN" else ".pkl"
         )
-        model_type = (
-            "dqn"
-            if getattr(self.agent, "agent_type", "").upper() == "DQN"
-            else "qlearning"
-        )
+        
+        model_type = ""
+        if getattr(self.agent, "agent_type", "").upper() == "DQN":
+            model_type = "dqn"
+        elif getattr(self.agent, "agent_type", "").upper() == "Q":
+            model_type = "qlearning"
+        elif getattr(self.agent, "agent_type", "").upper() == "Q-FUZZY":
+            model_type = "qfuzzyhybrid"    
+
         interrupted_dir = Path(
             f"model/{model_type}/{self.savecfg.start_time}_{self.savecfg.note}/interrupted"
         )
