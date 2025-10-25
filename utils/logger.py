@@ -169,12 +169,15 @@ def log_verbose_details(
     act = observation.get("last_action", 0)
     iter_no = observation.get("iteration")
 
+    # Color thresholds (tune as needed)
     cpu_col = _color(cpu, warn=70, crit=90)
     mem_col = _color(mem, warn=75, crit=90)
-    rt_col = _color(rt, warn=200, crit=500, reverse=True)
+    rt_col = _color(rt, warn=70, crit=90)
 
+    # Progress bars
     cpu_bar = _bar(cpu)
     mem_bar = _bar(mem)
+    rt_bar = _bar(rt)
 
     state_key = agent.get_state_key(observation)
     q_vals, qmax, best_idx = _safe_q_values(agent, state_key, logger)
@@ -183,7 +186,7 @@ def log_verbose_details(
     hdr = f"{_ARROW} Iter {iter_no:02d} " if isinstance(iter_no, int) else f"{_ARROW} "
     cpu_str = f"{cpu_col}CPU {_fmt_pct(cpu)} {cpu_bar}{RESET}"
     mem_str = f"{mem_col}MEM {_fmt_pct(mem)} {mem_bar}{RESET}"
-    rt_str = f"{rt_col}RT {_fmt_ms(rt)}{RESET}"
+    rt_str = f"{rt_col}RT {_fmt_pct(rt)} {rt_bar}{RESET}"
     act_str = f"ACT {int(act):3d}"
 
     if qmax is not None and best_idx is not None:

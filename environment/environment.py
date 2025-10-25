@@ -2,8 +2,6 @@ import time
 from logging import Logger
 from typing import Optional
 
-import numpy as np
-
 from database.influxdb import InfluxDB
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
@@ -12,7 +10,7 @@ from utils import get_metrics, wait_for_pods_ready
 
 
 class KubernetesEnv:
-    def __init__( 
+    def __init__(  # noqa: PLR0913
         self,
         min_replicas: int = 1,
         max_replicas: int = 50,
@@ -82,10 +80,9 @@ class KubernetesEnv:
             "cpu_usage": (0, 100.0),
             "memory_usage": (0, 100.0),
             "response_time": (0, 100.0),
-            "last_action": (0, 99),
+            "last_action": (0, 99),  # Fixed: should be 0-99, not 1-99
         }
         self.algorithm = algorithm
-
         self.logger.info("Initialized KubernetesEnv environment")
         self.logger.info(f"Environment configuration: {self.__dict__}")
 
@@ -179,83 +176,45 @@ class KubernetesEnv:
         )
 
     def _calculate_reward(self) -> float:
-        """
-        Compute reward based on algorithm type.
-        - Q: rule-based crisp reward
-        - Q-FUZZYHYBRID: smooth fuzzy-based reward using continuous membership
-        """
+        # membuat jadi percentage, agar applicable di semua skala SLA
         response_time_percentage = (self.response_time / self.max_response_time) * 100.0
 
-        if self.algorithm.upper() == "Q":
-            # --- Standard crisp penalty-based reward ---
-            if self.cpu_usage < self.min_cpu:
-                cpu_pen = (self.min_cpu - self.cpu_usage) / self.min_cpu
-            elif self.cpu_usage > self.max_cpu:
-                cpu_pen = (self.cpu_usage - self.max_cpu) / (100 - self.max_cpu)
-            else:
-                cpu_pen = 0.0
-
-            if self.memory_usage < self.min_memory:
-                mem_pen = (self.min_memory - self.memory_usage) / self.min_memory
-            elif self.memory_usage > self.max_memory:
-                mem_pen = (self.memory_usage - self.max_memory) / (100 - self.max_memory)
-            else:
-                mem_pen = 0.0
-
-            resp_pen = min(
-                self.response_time_weight,
-                max(0.0, (response_time_percentage - 100.0) / 100.0),
-            )
-
-            cpu_mem_pen = self.cpu_memory_weight * (cpu_pen + mem_pen)
-            cost_pen = (
-                self.cost_weight
-                * (self.replica_state - self.min_replicas)
-                / self.range_replicas
-            )
-
-            reward = 1.0 - resp_pen - cpu_mem_pen - cost_pen
-
-        elif self.algorithm.upper() in ["Q-FUZZY", "QFUZZYHYBRID"]:
-            # --- Fuzzy-based smooth reward ---
-            def fuzzy_membership(value, low, high, mid=50.0):
-                """
-                Compute fuzzy membership where:
-                - near mid (ideal) → 1.0
-                - near low/high (bad extremes) → 0.0
-                Smooth Gaussian-like curve.
-                """
-                sigma = (high - low) / 4.0
-                return float(np.exp(-0.5 * ((value - mid) / sigma) ** 2))
-
-            # Compute fuzzy satisfaction (0..1)
-            cpu_fuzzy = fuzzy_membership(self.cpu_usage, self.min_cpu, self.max_cpu)
-            mem_fuzzy = fuzzy_membership(self.memory_usage, self.min_memory, self.max_memory)
-            resp_fuzzy = fuzzy_membership(response_time_percentage, 0.0, 100.0, mid=50.0)
-
-            # Weighted fuzzy satisfaction
-            performance_score = (
-                self.cpu_memory_weight * (cpu_fuzzy + mem_fuzzy) / 2.0
-                + self.response_time_weight * resp_fuzzy
-            ) / (self.cpu_memory_weight + self.response_time_weight)
-
-            # Cost penalty (same as crisp)
-            cost_pen = (
-                self.cost_weight
-                * (self.replica_state - self.min_replicas)
-                / self.range_replicas
-            )
-
-            # Fuzzy reward: smooth, stable, continuous
-            reward = (2 * performance_score - 1.0) - cost_pen  # normalize to [-1,1]
-
+        # Penalti biner: 0 jika dalam batas, 1 jika di luar
+        if self.cpu_usage < self.min_cpu:
+            cpu_pen = (self.min_cpu - self.cpu_usage) / self.min_cpu
+        elif self.cpu_usage > self.max_cpu:
+            cpu_pen = (self.cpu_usage - self.max_cpu) / (100 - self.max_cpu)
         else:
-            raise ValueError(f"Unsupported algorithm type in reward: {self.algorithm}")
+            cpu_pen = 0.0
 
-        # Clip reward for stability
-        reward = float(max(min(reward, 1.0), -1.0))
-        return reward
+        if self.memory_usage < self.min_memory:
+            mem_pen = (self.min_memory - self.memory_usage) / self.min_memory
+        elif self.memory_usage > self.max_memory:
+            mem_pen = (self.memory_usage - self.max_memory) / (100 - self.max_memory)
+        else:
+            mem_pen = 0.0
 
+        # Response time penalty only if exceeding 100% of SLA, normalized to ~0..1
+        # 0-100% = no penalty, >100% = increasing penalty
+        resp_pen = min(
+            self.response_time_weight,
+            max(0.0, (response_time_percentage - 100.0) / 100.0),
+        )  # Cap penalty at 1.0 for stability
+        # max() ensures no negative penalty when response_time < 100% SLA (ReLU-like)
+
+        cpu_mem_pen = self.cpu_memory_weight * (cpu_pen + mem_pen)
+
+        cost_pen = (
+            self.cost_weight
+            * (self.replica_state - self.min_replicas)
+            / self.range_replicas
+        )
+
+        # Reward sederhana: mulai dari 1, kurangi penalti
+        reward = 1.0 - resp_pen - cpu_mem_pen - cost_pen
+
+        # Clamp agar stabil
+        return float(max(min(reward, 1.0), -1.0))
 
     def _scale_and_get_metrics(self) -> None:
         self._scale()
@@ -335,18 +294,15 @@ class KubernetesEnv:
             "response_time": self.response_time,
             "last_action": self.last_action,
         }
-        
-        if self.influxdb:
-            self.influxdb.write_point(
-                measurement="autoscaling_metrics",
-                tags={
-                    "namespace": self.namespace,
-                    "deployment": self.deployment_name,
-                    "algorithm": self.algorithm,
-                },
-                fields={**info},
-            )
-            
+        self.influxdb.write_point(
+            measurement="autoscaling_metrics",
+            tags={
+                "namespace": self.namespace,
+                "deployment": self.deployment_name,
+                "algorithm" : self.algorithm
+            },
+            fields={**info},
+        ) if self.influxdb else None
         return observation, reward, terminated, info
 
     def reset(self) -> dict[str, float]:

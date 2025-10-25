@@ -66,7 +66,6 @@ class QLearning:
         else:
             action = np.argmax(self.q_table[state_key])
 
-        # REMOVED: Epsilon decay moved to update_q_table() to avoid double decay
         return action
 
     def update_q_table(
@@ -106,7 +105,7 @@ class QLearning:
     # (S`,A`) [State dan action pada step berikutnya dari state(observation) yang sekarang]
 
     # -Q(S,A) [Untuk mengurangi pengaruh reward sebelumnya yang sudah tercatat di Q table] lebih stabil
-    """  
+    """
 
     def save_model(self, filepath: str, episode_count: int = 0):
         """Save Q-table and parameters to file"""
@@ -154,4 +153,4 @@ class QLearning:
             self.logger.info(f"Q-table size: {len(self.q_table)} states")
         except Exception as e:
             self.logger.error(f"Failed to load model from {filepath}: {e}")
-            raise
+            raise                
