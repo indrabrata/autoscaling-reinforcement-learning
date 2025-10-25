@@ -21,9 +21,9 @@ class Fuzzy:
             elif b <= x <= c:
                 return 1.0
             elif a < x < b:
-                return (x - a) / (b - a)
+                return (x - a) / (b - a) if (b - a) != 0 else 0.0
             else:  # c < x < d
-                return (d - x) / (d - c)
+                return (d - x) / (d - c) if (d - c) != 0 else 0.0
 
         self.memberships = {
             "cpu_usage": {
