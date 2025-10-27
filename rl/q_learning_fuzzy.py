@@ -134,7 +134,7 @@ class QLearningFuzzy:
                 raise FileNotFoundError(f"Model file not found: {filepath}")
 
             with Path(filepath).open("rb") as f:
-                model_data = pickle.load(f)  # noqa: S301
+                model_data = pickle.load(f)
 
             self.q_table = model_data["q_table"]
             self.learning_rate = model_data["learning_rate"]

@@ -96,6 +96,7 @@ if __name__ == "__main__":
         raise ValueError(f"Invalid model path: {model_path}")
       
     agent.load_model(model_path)
+    agent.epsilon = 0
     obs = env.reset()
     
     while True:
