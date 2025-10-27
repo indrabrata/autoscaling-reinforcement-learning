@@ -8,14 +8,6 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 
 class InfluxDB:
     def __init__(self, url: str, token: str, org: str, bucket: str, logger: Logger):
-        """
-        Initialize connection to InfluxDB.
-        Args
-            url: InfluxDB URL (e.g., "http://localhost:8086")
-            token: Auth token
-            org: Organization name
-            bucket: Target bucket
-        """
         self.url = url
         self.token = token
         self.org = org
@@ -37,14 +29,6 @@ class InfluxDB:
         fields: dict,
         timestamp: Optional[datetime] = None,
     ):
-        """
-        Write a single point into InfluxDB.
-        Args
-            measurement: Measurement name (string)
-            tags: Dictionary of tags (indexed metadata)
-            fields: Dictionary of fields (actual values)
-            timestamp: Optional datetime object (default: now)
-        """
         try:
             if not fields:
                 raise ValueError("At least one field must be provided")
@@ -70,6 +54,5 @@ class InfluxDB:
             self.logger.error("Failed to write point: %s", e)
 
     def close(self):
-        """Close the client connection."""
         self.client.close()
         self.logger.info("InfluxDB connection closed.")

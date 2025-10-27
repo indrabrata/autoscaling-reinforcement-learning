@@ -10,7 +10,7 @@ from utils import get_metrics, wait_for_pods_ready
 
 
 class KubernetesEnv:
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         min_replicas: int = 1,
         max_replicas: int = 50,
@@ -76,22 +76,11 @@ class KubernetesEnv:
         self.cpu_memory_weight = cpu_memory_weight
         self.cost_weight = cost_weight
 
-        self.observation_space = {
-            "cpu_usage": (0, 100.0),
-            "memory_usage": (0, 100.0),
-            "response_time": (0, 100.0),
-            "last_action": (0, 99),  # Fixed: should be 0-99, not 1-99
-        }
         self.algorithm = algorithm
         self.logger.info("Initialized KubernetesEnv environment")
         self.logger.info(f"Environment configuration: {self.__dict__}")
 
     def _scale(self) -> None:
-        """Scale deployment with persistent retry until success.
-
-        This method will keep retrying indefinitely until the scaling operation
-        succeeds, using exponential backoff with jitter to handle cluster issues.
-        """
         HTTP_INTERNAL_SERVER_ERROR = 500
         HTTP_CONFLICT = 409
 
@@ -176,10 +165,8 @@ class KubernetesEnv:
         )
 
     def _calculate_reward(self) -> float:
-        # membuat jadi percentage, agar applicable di semua skala SLA
         response_time_percentage = (self.response_time / self.max_response_time) * 100.0
 
-        # Penalti biner: 0 jika dalam batas, 1 jika di luar
         if self.cpu_usage < self.min_cpu:
             cpu_pen = (self.min_cpu - self.cpu_usage) / self.min_cpu
         elif self.cpu_usage > self.max_cpu:
@@ -194,13 +181,10 @@ class KubernetesEnv:
         else:
             mem_pen = 0.0
 
-        # Response time penalty only if exceeding 100% of SLA, normalized to ~0..1
-        # 0-100% = no penalty, >100% = increasing penalty
         resp_pen = min(
             self.response_time_weight,
             max(0.0, (response_time_percentage - 100.0) / 100.0),
-        )  # Cap penalty at 1.0 for stability
-        # max() ensures no negative penalty when response_time < 100% SLA (ReLU-like)
+        )
 
         cpu_mem_pen = self.cpu_memory_weight * (cpu_pen + mem_pen)
 
@@ -210,10 +194,8 @@ class KubernetesEnv:
             / self.range_replicas
         )
 
-        # Reward sederhana: mulai dari 1, kurangi penalti
         reward = 1.0 - resp_pen - cpu_mem_pen - cost_pen
 
-        # Clamp agar stabil
         return float(max(min(reward, 1.0), -1.0))
 
     def _scale_and_get_metrics(self) -> None:
@@ -262,13 +244,9 @@ class KubernetesEnv:
     def step(self, action: int) -> tuple[dict[str, float], float, bool, dict]:
         self.last_action = action
 
-        # Map discrete action (0-99) to continuous percentage (0.0-1.0)
-        # Action 0 → 0.0 (min_replicas)
-        # Action 99 → 1.0 (max_replicas)
-        # Example: min=1, max=12, action=50 → 50/99≈0.505 → 1+0.505*11≈6.5→7 replicas
         percentage = (
             (action / 99.0) if len(self.action_space) > 1 else 0.0
-        )  # Map 0-99 to 0.0-1.0
+        )
         self.replica_state_old = self.replica_state
         self.replica_state = round(self.min_replicas + percentage * self.range_replicas)
         self.replica_state = max(

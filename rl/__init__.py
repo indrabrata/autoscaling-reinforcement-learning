@@ -1,5 +1,5 @@
 from .q_learning import QLearning
-from .q_learning_fuzzy import QFuzzyHybrid
+from .q_learning_fuzzy import QLearningFuzzy
 
 
-__all__ = ["QLearning", "QFuzzyHybrid"]
+__all__ = ["QLearning", "QLearningFuzzy"]

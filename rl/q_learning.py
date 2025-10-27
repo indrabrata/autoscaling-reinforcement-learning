@@ -36,11 +36,9 @@ class QLearning:
         self.logger.info(f"Agent parameters: {self.__dict__}")
 
     def add_episode_count(self, count: int = 1):
-        """Increment the episode count"""
         self.episodes_trained += count
 
     def get_state_key(self, observation: dict) -> tuple[int, int, int, int]:
-        """Convert observation to a hashable state key"""
         cpu = int(observation["cpu_usage"])
         memory = int(observation["memory_usage"])
         action = int(observation["last_action"])
@@ -54,13 +52,11 @@ class QLearning:
         return (cpu, memory, response_time, action)
 
     def get_action(self, observation: dict) -> int:
-        """Choose action using epsilon-greedy strategy"""
         state_key = self.get_state_key(observation)
 
         if state_key not in self.q_table:
             self.q_table[state_key] = np.zeros(self.n_actions)
 
-        # Choose action based on epsilon-greedy
         if np.random.rand() < self.epsilon:
             action = np.random.randint(0, self.n_actions)
         else:
@@ -71,7 +67,6 @@ class QLearning:
     def update_q_table(
         self, observation: dict, action: int, reward: float, next_observation: dict
     ):
-        """Update Q-table using Q-learning algorithm"""
         state_key = self.get_state_key(observation)
         next_state_key = self.get_state_key(next_observation)
 
@@ -82,7 +77,7 @@ class QLearning:
 
         best_next_action = np.max(
             self.q_table[next_state_key]
-        )  # Ini rumus Q Learning, jika sarsa akan memanggil fungsi get_action()
+        )
         self.q_table[state_key][action] += self.learning_rate * (
             reward
             + self.discount_factor * best_next_action
@@ -90,22 +85,6 @@ class QLearning:
         )
         if self.epsilon > self.epsilon_min:
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
-
-    # Q(S,A)←Q(S,A)+α(R+γQ(S′,A′)−Q(S,A))
-
-    """
-    # Q(S,A) [Reward sebelumnya yang sudah tercatat di Q table]
-    # R [Reward terbaru yang didapat dari action yang diambil]
-
-    # @ [Learning rate, seberapa besar pengaruh reward terbaru terhadap Q(S,A)]
-
-    # Y [Discount factor, seberapa besar pengaruh reward di masa depan terhadap Q(S,A) Jadi
-    di Q Learning juga memperhitungkan reward kemungkinan pada step berikutnya dari perolehan state(observation) yang sekarang]
-
-    # (S`,A`) [State dan action pada step berikutnya dari state(observation) yang sekarang]
-
-    # -Q(S,A) [Untuk mengurangi pengaruh reward sebelumnya yang sudah tercatat di Q table] lebih stabil
-    """
 
     def save_model(self, filepath: str, episode_count: int = 0):
         """Save Q-table and parameters to file"""
@@ -121,7 +100,6 @@ class QLearning:
                 "created_at": self.created_at,
                 "episodes_trained": episode_count,
             }
-            # Create directory if it doesn't exist
             Path(filepath).parent.mkdir(parents=True, exist_ok=True)
             with Path(filepath).open("wb") as f:
                 pickle.dump(model_data, f)

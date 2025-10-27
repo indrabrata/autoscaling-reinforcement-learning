@@ -10,8 +10,6 @@ import os
 import types
 
 import numpy as np
-import torch
-from rl import QLearning
 
 if os.name == "nt":
     try:
@@ -39,7 +37,6 @@ def setup_logger(
     if logger.hasHandlers():
         logger.handlers.clear()
 
-    # Suppress noisy libraries
     logging.getLogger("kubernetes.client.rest").setLevel(logging.WARNING)
     logging.getLogger("kubernetes").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -50,7 +47,6 @@ def setup_logger(
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
 
-    # Override emit to handle UTF-8
     def emit_utf8(self, record):
         try:
             msg = self.format(record)
@@ -68,12 +64,11 @@ def setup_logger(
         log_dir_time.mkdir(parents=True, exist_ok=True)
 
         log_file = log_dir_time / f"{service_name}_{now}.log"
-        # Add encoding='utf-8' to support Unicode characters on all platforms
         file_handler = RotatingFileHandler(
             log_file, 
             maxBytes=10 * 1024 * 1024, 
             backupCount=5,
-            encoding='utf-8'  # This is the key fix
+            encoding='utf-8'
         )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
@@ -113,49 +108,31 @@ def _fmt_ms(v: float) -> str:
         return str(v)
 
 def _safe_q_values(
-    agent: QLearning, state_key, logger: Logger
+    agent: Any, state_key
 ) -> Tuple[Optional[np.ndarray], Optional[float], Optional[int]]:
-    q_table = getattr(agent, "q_table", None)
-    if q_table is not None and len(q_table) > 0 and (getattr(agent, "agent_type", "") == "Q" or getattr(agent, "agent_type", "") == "Q-FUZZY"):
+    try:
+        q_table = getattr(agent, "q_table", None)
+        if q_table is None or len(q_table) == 0:
+            return None, None, None
+        
+        agent_type = getattr(agent, "agent_type", "").upper()
+        if agent_type not in ("Q", "QFUZZYHYBRID"):
+            return None, None, None
+        
         if isinstance(state_key, np.ndarray):
             state_key = tuple(state_key.flatten())
-        if state_key in q_table:
-            q = q_table[state_key]
-            max_q = float(np.max(q))
-            best_idx = int(np.argmax(q))
-            return q, max_q, best_idx
+        
+        if state_key not in q_table:
+            return None, None, None
+        
+        q = q_table[state_key]
+        max_q = float(np.max(q))
+        best_idx = int(np.argmax(q))
+        
+        return q, max_q, best_idx
+        
+    except Exception as e:
         return None, None, None
-
-    policy = getattr(agent, "policy_net", None)
-    device = getattr(agent, "device", "cpu")
-    if policy is not None:
-        try:
-            with torch.no_grad():
-                state_np = (
-                    np.array(state_key, dtype=np.float32)
-                    if not isinstance(state_key, np.ndarray)
-                    else state_key.astype(np.float32)
-                )
-                if state_np.ndim == 1:
-                    state_t = torch.from_numpy(state_np).unsqueeze(0)
-                else:
-                    state_t = torch.from_numpy(state_np)
-                if device and device != "cpu":
-                    state_t = state_t.to(device)
-                q_t = policy(state_t)
-                if q_t.ndim > 1:
-                    q_t = q_t.squeeze(0)
-                q_np = q_t.detach().cpu().numpy().astype(np.float32)
-                max_q = float(q_np.max())
-                best_idx = int(q_np.argmax())
-                return q_np, max_q, best_idx
-        except Exception as exc:
-            logger.error(f"Failed to compute DQN Q-values: {exc}")
-            logger.error(f"State key: {state_key}")
-            logger.error(f"Device: {device}")
-            logger.error(f"Full traceback: {traceback.format_exc()}")
-
-    return None, None, None
 
 def log_verbose_details(
     observation: Dict[str, Any], agent: Any, verbose: bool, logger: Logger
@@ -163,41 +140,41 @@ def log_verbose_details(
     if not verbose:
         return
 
-    cpu = float(observation.get("cpu_usage", 0.0))
-    mem = float(observation.get("memory_usage", 0.0))
-    rt = float(observation.get("response_time", 0.0))
-    act = observation.get("last_action", 0)
-    iter_no = observation.get("iteration")
+    try:
+        cpu = float(observation.get("cpu_usage", 0.0))
+        mem = float(observation.get("memory_usage", 0.0))
+        rt = float(observation.get("response_time", 0.0))
+        act = observation.get("last_action", 0)
+        iter_no = observation.get("iteration")
 
-    # Color thresholds (tune as needed)
-    cpu_col = _color(cpu, warn=70, crit=90)
-    mem_col = _color(mem, warn=75, crit=90)
-    rt_col = _color(rt, warn=70, crit=90)
+        cpu_col = _color(cpu, warn=70, crit=90)
+        mem_col = _color(mem, warn=75, crit=90)
+        rt_col = _color(rt, warn=70, crit=90)
 
-    # Progress bars
-    cpu_bar = _bar(cpu)
-    mem_bar = _bar(mem)
-    rt_bar = _bar(rt)
+        cpu_bar = _bar(cpu)
+        mem_bar = _bar(mem)
+        rt_bar = _bar(rt)
 
-    state_key = agent.get_state_key(observation)
-    q_vals, qmax, best_idx = _safe_q_values(agent, state_key, logger)
+        state_key = agent.get_state_key(observation)
+        q_vals, qmax, best_idx = _safe_q_values(agent, state_key)
 
-    RESET = "\033[0m"
-    hdr = f"{_ARROW} Iter {iter_no:02d} " if isinstance(iter_no, int) else f"{_ARROW} "
-    cpu_str = f"{cpu_col}CPU {_fmt_pct(cpu)} {cpu_bar}{RESET}"
-    mem_str = f"{mem_col}MEM {_fmt_pct(mem)} {mem_bar}{RESET}"
-    rt_str = f"{rt_col}RT {_fmt_pct(rt)} {rt_bar}{RESET}"
-    act_str = f"ACT {int(act):3d}"
+        RESET = "\033[0m"
+        hdr = f"{_ARROW} Iter {iter_no:02d} " if isinstance(iter_no, int) else f"{_ARROW} "
+        cpu_str = f"{cpu_col}CPU {_fmt_pct(cpu)} {cpu_bar}{RESET}"
+        mem_str = f"{mem_col}MEM {_fmt_pct(mem)} {mem_bar}{RESET}"
+        rt_str = f"{rt_col}RT {_fmt_pct(rt)} {rt_bar}{RESET}"
+        act_str = f"ACT {int(act):3d}"
 
-    if qmax is not None and best_idx is not None:
-        q_str = f"Qmax {qmax:+.3f}"
-        best_s = f"Best {best_idx + 1:3d}"
-    else:
-        q_str, best_s = "Qmax  n/a", "Best  n/a"
+        if qmax is not None and best_idx is not None:
+            q_str = f"Qmax {qmax:+.3f}"
+            best_s = f"Best {best_idx:3d}"
+        else:
+            q_str, best_s = "Qmax  n/a", "Best  n/a"
 
-    logger.info(
-        f"{hdr}| {cpu_str} | {mem_str} | {rt_str} | {act_str} | {q_str} | {best_s}"
-    )
-
-    if q_vals is None:
-        logger.debug("  (state unseen or DQN/Torch unavailable; skipping Q table dump)")
+        logger.info(
+            f"{hdr}| {cpu_str} | {mem_str} | {rt_str} | {act_str} | {q_str} | {best_s}"
+        )
+        
+    except Exception as e:
+        logger.warning(f"Error in verbose logging: {e}")
+        logger.debug(f"Observation: {observation}")

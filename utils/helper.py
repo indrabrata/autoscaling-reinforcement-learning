@@ -41,18 +41,19 @@ def normalize_endpoints(
     default: Iterable[Tuple[str, str]] = (("/", "GET"), ("/docs", "GET")),
 ) -> List[Tuple[str, str]]:
     """
-    Terima berbagai bentuk:
-      - JSON string: [["/a","GET"],["/b","POST"]]
-      - Python literal string: [("/a","GET"), ("/b","POST")]
-      - List[tuple]: [("/a","GET"), ...]
-      - List[str]: ["/a", "/b"]   -> method default "GET"
-      - String tunggal: "/a"      -> method default "GET"
-    Return: List[Tuple[str, str]]
+        Accepted inputs:
+
+        JSON string: '[["/a","GET"],["/b","POST"]]'
+        Python literal string: '[("/a","GET"), ("/b","POST")]'
+        List[tuple]: [("/a","GET"), ...]
+        List[str]: ["/a", "/b"] -> default method "GET"
+        Single string: "/a" -> default method "GET"
+        
+        Return: List[Tuple[str, str]]
     """
     if endpoints is None:
         endpoints = default
 
-    # sudah iterable tuple/list?
     if isinstance(endpoints, (list, tuple)):
         out: List[Tuple[str, str]] = []
         for item in endpoints:
@@ -64,7 +65,6 @@ def normalize_endpoints(
                 out.append((item, "GET"))
         return out
 
-    # string -> coba JSON dulu
     if isinstance(endpoints, str):
         s = endpoints.strip()
         for loader in (json.loads, ast.literal_eval):
@@ -72,9 +72,7 @@ def normalize_endpoints(
                 parsed = loader(s)
                 return normalize_endpoints(parsed, default)
             except Exception:
-                print("Failed to parse endpoints JSON:", s)  # noqa: T201
-        # fallback: anggap string tunggal path
+                print("Failed to parse endpoints JSON:", s) 
         return [(s, "GET")]
 
-    # fallback default
     return normalize_endpoints(default, default)

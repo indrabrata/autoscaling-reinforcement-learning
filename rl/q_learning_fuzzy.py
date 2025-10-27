@@ -10,16 +10,7 @@ from .fuzzy import Fuzzy
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-class QFuzzyHybrid:
-    """
-    Q-Fuzzy Hybrid Agent for intelligent auto-scaling.
-
-    Integrates:
-    - Fuzzy logic for state representation and influence bias
-    - Q-learning for value-based decision optimization
-    - Replica scaling represented as percentage (0–100)
-    """
-
+class QLearningFuzzy:
     def __init__(
         self,
         learning_rate: float = 0.1,
@@ -48,7 +39,6 @@ class QFuzzyHybrid:
         self.logger.info(f"Agent parameters: {self.__dict__}")
 
     def get_state_key(self, observation: dict) -> Tuple[str, str, str]:
-        """Convert observation to fuzzy state key (discrete labels)."""
         response_time_raw = observation["response_time"]
         if np.isnan(response_time_raw) or response_time_raw is None:
             response_time = 0
@@ -63,19 +53,13 @@ class QFuzzyHybrid:
         return (cpu_label, mem_label, resp_label)
 
     def get_action(self, observation: dict) -> int:
-        """
-        Choose action using epsilon-greedy + fuzzy influence bias.
-        Influence ∈ [-1, 1] adjusts scaling direction and intensity.
-        """
         fuzzy_result = self.fuzzy.decide(observation)
         influence = fuzzy_result["influence"]
         state_key = self.get_state_key(observation)
 
-        # Initialize state if needed
         if state_key not in self.q_table:
             self.q_table[state_key] = np.zeros(self.n_actions)
 
-        # ε-greedy
         if np.random.rand() < self.epsilon:
             action = np.random.randint(0, self.n_actions)
             self.logger.debug(f"[EXPLORE] Random action {action}%")
@@ -84,8 +68,7 @@ class QFuzzyHybrid:
             action = int(np.argmax(q_values))
             self.logger.debug(f"[EXPLOIT] Best Q action {action}%")
 
-        # Influence biasing
-        bias = int((influence + 1) / 2 * (self.n_actions - 1))  # map to 0–99
+        bias = int((influence + 1) / 2 * (self.n_actions - 1))
         final_action = int((action + bias) / 2)
         final_action = np.clip(final_action, 0, self.n_actions - 1)
 
@@ -98,17 +81,14 @@ class QFuzzyHybrid:
         reward: float,
         next_observation: dict,
     ):
-        """Update Q-table using off-policy Q-learning."""
         state_key = self.get_state_key(observation)
         next_state_key = self.get_state_key(next_observation)
 
-        # Ensure both states exist
         if state_key not in self.q_table:
             self.q_table[state_key] = np.zeros(self.n_actions)
         if next_state_key not in self.q_table:
             self.q_table[next_state_key] = np.zeros(self.n_actions)
 
-        # Q-learning update
         best_next_action = np.max(self.q_table[next_state_key])
         old_value = self.q_table[state_key][action]
 
@@ -116,7 +96,6 @@ class QFuzzyHybrid:
             reward + self.discount_factor * best_next_action - old_value
         )
 
-        # Epsilon decay
         if self.epsilon > self.epsilon_min:
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
@@ -129,7 +108,6 @@ class QFuzzyHybrid:
         self.episodes_trained += count
 
     def save_model(self, filepath: str, episode_count: int = 0):
-        """Save Q-table and parameters to file."""
         try:
             model_data = {
                 "q_table": self.q_table,
@@ -151,7 +129,6 @@ class QFuzzyHybrid:
             raise
 
     def load_model(self, filepath: str):
-        """Load Q-table and parameters from file."""
         try:
             if not Path(filepath).exists():
                 raise FileNotFoundError(f"Model file not found: {filepath}")

@@ -1,15 +1,14 @@
 import ast
 import os
 import time
-from pathlib import Path
-
-import numpy as np
-from database import InfluxDB
 from dotenv import load_dotenv
-from environment import KubernetesEnv
-from rl import QLearning, QLearningFuzzy
-from trainer import Trainer
-from utils import setup_logger
+
+from database.influxdb import InfluxDB
+from environment.environment import KubernetesEnv
+from rl.q_learning import QLearning
+from rl.q_learning_fuzzy import QLearningFuzzy
+from utils.logger import log_verbose_details, setup_logger
+
 
 load_dotenv()
 
@@ -68,7 +67,7 @@ if __name__ == "__main__":
     )
 
     if choose_algorithm == "Q":
-        algorithm = QLearning(
+        agent = QLearning(
             learning_rate=float(os.getenv("LEARNING_RATE", 0.1)),
             discount_factor=float(os.getenv("DISCOUNT_FACTOR", 0.95)),
             epsilon_start=float(os.getenv("EPSILON_START", 0.1)),
@@ -79,7 +78,7 @@ if __name__ == "__main__":
         )
 
     elif choose_algorithm in ("Q-FUZZY", "QFUZZYHYBRID", "Q_FUZZY"):
-        algorithm = QLearningFuzzy(
+        agent = QLearningFuzzy(
             learning_rate=float(os.getenv("LEARNING_RATE", 0.1)),
             discount_factor=float(os.getenv("DISCOUNT_FACTOR", 0.95)),
             epsilon_start=float(os.getenv("EPSILON_START", 0.1)),
@@ -88,47 +87,28 @@ if __name__ == "__main__":
             created_at=start_time,
             logger=logger,
         )
-
+        
     else:
         raise ValueError(f"Unsupported algorithm: {choose_algorithm}")
+    
+    model_path = os.getenv("MODEL_PATH", "")
+    if model_path == "":
+        raise ValueError(f"Invalid model path: {model_path}")
+      
+    agent.load_model(model_path)
+    obs = env.reset()
+    
+    while True:
+      act = agent.get_action(obs)
+      nxt, rew, term, info = env.step(act)
+      obs = nxt
+      
+      logger.debug(f"Observation type: {type(obs)}, value: {obs}")
 
-    note = os.getenv("NOTE", "default")
-
-    trainer = Trainer(
-        agent=algorithm,
-        env=env,
-        logger=logger,
-        resume=ast.literal_eval(os.getenv("RESUME", "False")),
-        resume_path=os.getenv("RESUME_PATH", ""),
-        reset_epsilon=ast.literal_eval(os.getenv("RESET_EPSILON", "True")),
-        change_epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.90)),
-    )
-
-    episodes = int(os.getenv("EPISODES", "10"))
-    trainer.train(episodes=episodes, note=note, start_time=start_time)
-
-    if hasattr(trainer.agent, "q_table"):
-        logger.info(f"\nQ-table size: {len(trainer.agent.q_table)} states")
-        logger.info("Sample Q-values:")
-        for i, (state, q_values) in enumerate(list(trainer.agent.q_table.items())[:5]):
-            max_q = np.max(q_values)
-            best_action = np.argmax(q_values)
-            logger.info(
-                f"State {state}: Best action = {best_action}, Max Q-value = {max_q:.3f}"
-            )
-    else:
-        logger.info("\nNo Q-table to display")
-
-    model_type = (
-        "qlearningfuzzy" if isinstance(trainer.agent, QLearningFuzzy)
-        else "qlearning" if isinstance(trainer.agent, QLearning)
-        else "unknown"
-    )
-    model_dir = Path(f"model/{model_type}/{start_time}_{note}/final")
-    model_dir.mkdir(parents=True, exist_ok=True)
-
-    timestamp = int(time.time())
-    model_file = model_dir / f"{model_type}_{timestamp}.pkl"
-    trainer.agent.save_model(str(model_file), trainer.agent.episodes_trained)
-
-    logger.info(f"Model saved to: {model_file}")
+      log_verbose_details(
+          observation=obs,
+          agent=agent,
+          verbose=True,
+          logger=logger,
+      )
+   

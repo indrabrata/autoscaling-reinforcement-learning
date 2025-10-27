@@ -4,19 +4,9 @@ from typing import Dict, Optional
 
 
 class Fuzzy:
-    """
-    Enhanced Fuzzy Logic module for autoscaling decisions.
-
-    Improvements:
-    - Smoother membership overlap with trapezoids
-    - Priority-based rule system (Response > CPU/Mem)
-    - Weighted influence computation (stability + hysteresis)
-    - Adaptive confidence for better maintain decisions
-    """
-
     def __init__(self, logger: Optional[Logger] = None):
         def _trapezoidal(x, a, b, c, d):
-            if x <= a or x >= d:
+            if x < a or x > d:
                 return 0.0
             elif b <= x <= c:
                 return 1.0
@@ -66,30 +56,55 @@ class Fuzzy:
         mem = fz.get("memory_usage", {})
         resp = fz.get("response_time", {})
 
-        # Scale up: triggered by bad response time or high utilization
         scale_up = max(
-            resp.get("high", 0.0) * 1.0,
-            resp.get("very_high", 0.0) * 1.0,
-            min(resp.get("medium", 0.0), max(cpu.get("high", 0.0), mem.get("high", 0.0))) * 0.9,
-            max(cpu.get("very_high", 0.0), mem.get("very_high", 0.0)) * 0.8,
+            # High response time dominates
+            max(resp.get("high", 0.0), resp.get("medium", 0.0)) * 1.0,
+
+            # CPU or Memory high and response medium/high
+            min(max(cpu.get("high", 0.0), mem.get("high", 0.0)),
+                max(resp.get("medium", 0.0), resp.get("high", 0.0))) * 0.9,
+
+            # CPU or Memory very high regardless of response
+            max(cpu.get("very_high", 0.0), mem.get("very_high", 0.0)) * 1.0,
+
+            # CPU medium, mem medium, but response high
+            min(cpu.get("medium", 0.0), mem.get("medium", 0.0), resp.get("high", 0.0)) * 0.85,
+
+            # CPU or Mem high while response is deteriorating (medium)
+            max(cpu.get("high", 0.0), mem.get("high", 0.0)) * resp.get("medium", 0.0) * 0.8,
         )
 
-        # Scale down: when utilization low & response acceptable
         scale_down = max(
+            # All metrics low
             min(cpu.get("low", 0.0), mem.get("low", 0.0), resp.get("low", 0.0)) * 1.0,
+
+            # CPU & Mem low, response medium (still fine)
             min(cpu.get("low", 0.0), mem.get("low", 0.0), resp.get("medium", 0.0)) * 0.9,
-            min(cpu.get("very_low", 0.0), mem.get("very_low", 0.0)) * 0.95,
+
+            # CPU or Mem very low and response low
+            max(cpu.get("very_low", 0.0), mem.get("very_low", 0.0)) * resp.get("low", 0.0) * 1.0,
+
+            # Response very low even if one resource is medium (under-utilized)
+            min(resp.get("very_low", 0.0), max(cpu.get("medium", 0.0), mem.get("medium", 0.0))) * 0.8,
         )
 
-        # No change: balanced or conflicting situation
         no_change = max(
-            min(cpu.get("medium", 0.0), mem.get("medium", 0.0), resp.get("low", 0.0)) * 1.0,
-            min(cpu.get("medium", 0.0), mem.get("medium", 0.0), resp.get("medium", 0.0)) * 0.9,
-            min(max(cpu.get("high", 0.0), mem.get("high", 0.0)), resp.get("low", 0.0)) * 0.8,
-            min(cpu.get("low", 0.0), mem.get("low", 0.0), resp.get("high", 0.0)) * 0.7,
+            # Balanced load
+            min(cpu.get("medium", 0.0), mem.get("medium", 0.0), resp.get("medium", 0.0)) * 1.0,
+
+            # CPU high but response still low — wait before scaling
+            min(cpu.get("high", 0.0), resp.get("low", 0.0)) * 0.8,
+
+            # CPU & Mem medium while response low — stable
+            min(cpu.get("medium", 0.0), mem.get("medium", 0.0), resp.get("low", 0.0)) * 0.9,
+
+            # CPU low, mem medium, response medium — stable
+            min(cpu.get("low", 0.0), mem.get("medium", 0.0), resp.get("medium", 0.0)) * 0.85,
+
+            # Mixed load but not dominant
+            min(max(cpu.get("medium", 0.0), mem.get("medium", 0.0)), resp.get("medium", 0.0)) * 0.8,
         )
 
-        # Normalize
         total = scale_up + scale_down + no_change + 1e-6
         res = {
             "scale_up": scale_up / total,
@@ -97,14 +112,10 @@ class Fuzzy:
             "no_change": no_change / total,
         }
 
-        self.logger.debug(f"Rule result: {res}")
         return res
 
+
     def influence(self, act: Dict[str, float]) -> float:
-        """
-        Convert fuzzy rule output into scalar influence [-1, 1].
-        Includes hysteresis and confidence weighting.
-        """
         up, down, stay = act["scale_up"], act["scale_down"], act["no_change"]
         total = up + down + stay + 1e-6
 
@@ -134,7 +145,6 @@ class Fuzzy:
         acts = self.apply_rules(fz)
         infl = self.influence(acts)
 
-        # Adaptive decision threshold
         if infl > 0.4:
             rec = "scale_up"
         elif infl < -0.4:

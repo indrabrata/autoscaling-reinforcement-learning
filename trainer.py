@@ -4,12 +4,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
-from typing import Optional
+from typing import Optional, Union
 
 from torch import mode
 
 from environment import KubernetesEnv
-from rl import QLearning
+from rl import QLearning, QLearningFuzzy
 from utils import log_verbose_details
 
 
@@ -22,7 +22,7 @@ class SaveConfig:
 class Trainer:
     def __init__(
         self,
-        agent: QLearning,
+        agent: Union[QLearning, QLearningFuzzy],
         env: KubernetesEnv,
         logger: Optional[logging.Logger] = None,
         resume: bool = False,
@@ -58,18 +58,13 @@ class Trainer:
             self.logger.warning("⚠️ Nothing to save yet.")
             return None
 
-        ext = (
-            ".pth" if getattr(self.agent, "agent_type", "").upper() == "DQN" else ".pkl"
-        )
-        
+        ext = ".pkl"
         agent_type = getattr(self.agent, "agent_type", "").upper()
         model_type = ""
-        if agent_type == "DQN":
-            model_type = "dqn"
-        elif agent_type == "Q":
+        if agent_type == "Q":
             model_type = "qlearning"
         elif agent_type == "QFUZZYHYBRID":
-            model_type = "qfuzzyhybrid"    
+            model_type = "qlearningfuzzy"    
 
         interrupted_dir = Path(
             f"model/{model_type}/{self.savecfg.start_time}_{self.savecfg.note}/interrupted"
@@ -162,13 +157,11 @@ class Trainer:
     def _save_checkpoint(
         self, episode: int, score: float, note: str, start_time: int
     ) -> None:
-        ext = (
-            ".pth" if getattr(self.agent, "agent_type", "").upper() == "DQN" else ".pkl"
-        )
+        ext = ".pkl"
         model_type = (
-            "dqn"
-            if getattr(self.agent, "agent_type", "").upper() == "DQN"
-            else "qlearning"
+            "qlearningfuzzy" if isinstance(self.agent, QLearningFuzzy)
+            else "qlearning" if isinstance(self.agent, QLearning)
+            else "unknown"
         )
         path = (
             f"model/{model_type}/{start_time}_{note}/checkpoints/"

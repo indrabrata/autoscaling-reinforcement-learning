@@ -29,7 +29,7 @@ def wait_for_pods_ready(
               namespace="{namespace}", owner_kind="Deployment", owner_name="{deployment_name}"
             }}
         )
-    """  # noqa: E501
+    """ 
     q_desired = f"""
     scalar(
       sum(

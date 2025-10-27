@@ -64,7 +64,6 @@ def _metrics_query(
 
         """
 
-    # Query for memory limits
     memory_limits_query = f"""
         sum by (pod) (
             kube_pod_container_resource_limits{{
@@ -90,7 +89,7 @@ def _metrics_result(
     memory_limits_results: list,
     cpu_usage_results: list,
     memory_usage_results: list,
-    logger: logging.Logger = logging.getLogger(__name__),  # noqa: B008
+    logger: logging.Logger = logging.getLogger(__name__),
 ) -> tuple[list[float], list[float], set[str]]:
     cpu_percentages = []
     memory_percentages = []
@@ -167,7 +166,7 @@ def _get_response_time(
     endpoints_method: list[tuple[str, str]] = (("/", "GET"), ("/docs", "GET")),
     interval: int = 15,
     quantile: float = 0.90,
-    logger: logging.Logger = logging.getLogger(__name__),  # noqa: B008
+    logger: logging.Logger = logging.getLogger(__name__),
 ) -> float:
     result = []
     for endpoint, method in endpoints_method:
@@ -237,7 +236,7 @@ def _scrape_metrics(
     cpu_limits_query: str,
     memory_limits_query: str,
     replicas: int,
-    logger: logging.Logger = logging.getLogger(__name__),  # noqa: B008
+    logger: logging.Logger = logging.getLogger(__name__),
 ) -> tuple[list, list, list, list]:
     fetch_start = time.time()
 
@@ -318,12 +317,8 @@ def get_metrics(
     quantile: float = 0.90,
     endpoints_method: list[tuple[str, str]] = (("/", "GET"), ("/docs", "GET")),
     increase: bool = False,
-    logger: logging.Logger = logging.getLogger(__name__),  # noqa: B008
+    logger: logging.Logger = logging.getLogger(__name__),
 ) -> tuple[float, float, float, int]:
-    """
-    Returns (cpu_usage_mean, memory_usage_mean, response_time, replica_count)
-    cpu in %, memory in %, averaged over matched pods.
-    """
     if increase and wait_time > 0:
         time.sleep(wait_time)
 
