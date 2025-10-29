@@ -47,7 +47,6 @@ wandb/
 tensorboard/
 
 # Data files
-*.json
 *.npz
 *.csv
 *.parquet

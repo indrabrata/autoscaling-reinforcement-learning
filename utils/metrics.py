@@ -319,7 +319,7 @@ def get_metrics(
     increase: bool = False,
     logger: logging.Logger = logging.getLogger(__name__),
 ) -> tuple[float, float, float, int]:
-    if increase and wait_time > 0:
+    if increase or wait_time > 0:
         time.sleep(wait_time)
 
     start = time.time()
