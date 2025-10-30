@@ -167,7 +167,6 @@ class KubernetesEnv:
     def _calculate_reward(self) -> float:
         response_time_percentage = (self.response_time / self.max_response_time) * 100.0
 
-        # --- CPU penalty ---
         if self.cpu_usage < self.min_cpu:
             cpu_pen = (self.min_cpu - self.cpu_usage) / self.min_cpu
         elif self.cpu_usage > self.max_cpu:
@@ -175,7 +174,6 @@ class KubernetesEnv:
         else:
             cpu_pen = 0.0
 
-        # --- Memory penalty ---
         if self.memory_usage < self.min_memory:
             mem_pen = (self.min_memory - self.memory_usage) / self.min_memory
         elif self.memory_usage > self.max_memory:
@@ -183,46 +181,42 @@ class KubernetesEnv:
         else:
             mem_pen = 0.0
 
-        # --- Response time penalty ---
         if response_time_percentage <= 100.0:
             resp_pen = 0.0
         else:
             resp_pen = min(1.0, (response_time_percentage - 100.0) / 100.0)
 
-        # --- CPU & Memory weighted penalty ---
         cpu_mem_pen = self.cpu_memory_weight * (cpu_pen + mem_pen)
 
-        # --- Adaptive Cost Penalty ---
         replica_ratio = (self.replica_state - self.min_replicas) / self.range_replicas
         
-
-        # Jika response tinggi & replica tinggi → kurangi cost_pen
         if response_time_percentage > 100 and replica_ratio > 0.6:
-            # scaling besar tapi response tetap tinggi → penalti biaya dikurangi 50%
-            cost_factor = 0.7
-        elif response_time_percentage > 100 and replica_ratio < 0.3:
-            # response tinggi tapi replica rendah → penalti biaya lebih besar
-            cost_factor = 1.7
+            cost_factor = 0.3
+        elif response_time_percentage > 100 and replica_ratio < 0.4:
+            cost_factor = 1.5
         else:
-            # normal case
             cost_factor = 1.0
 
-        if response_time_percentage < 80 and 0.3 <= replica_ratio <= 0.6:
-            efficiency_bonus = 0.05  # kecil agar tidak overfit ke efisiensi
-        else:
-            efficiency_bonus = 0.0            
+        cost_pen = self.cost_weight * cost_factor * replica_ratio
 
-        cost_pen = (
-            self.cost_weight
-            * cost_factor
-            * replica_ratio
-        )
+        total_penalty = resp_pen + cpu_mem_pen + cost_pen
+        total_penalty = max(0.0, total_penalty)
 
-        # --- Final Reward ---
-        reward = 1.0 - resp_pen - cpu_mem_pen - cost_pen + efficiency_bonus
-        reward = max(min(reward, 1.0), -1.0)
+        reward = float((1.0 / (1.0 + total_penalty)))
 
-        return float(reward)
+        cpu_ideal = self.min_cpu <= self.cpu_usage <= self.max_cpu
+        mem_ideal = self.min_memory <= self.memory_usage <= self.max_memory
+        resp_ideal = response_time_percentage < 80
+        replica_efficient = 0.3 <= replica_ratio <= 0.6
+
+        if cpu_ideal and mem_ideal and resp_ideal and replica_efficient:
+            reward += 0.05  # bonus tambahan
+
+        reward = max(min(reward, 1.0), 0.0)
+
+        return reward
+
+
 
     def _scale_and_get_metrics(self) -> None:
         self._scale()
@@ -257,9 +251,8 @@ class KubernetesEnv:
             )
 
     def _get_observation(self) -> dict[str, float]:
-        response_time_percentage = min(
-            (self.response_time / self.max_response_time) * 100.0, 100.0
-        )
+        response_time_percentage = (self.response_time / self.max_response_time) * 100.0
+
         return {
             "cpu_usage": self.cpu_usage,
             "memory_usage": self.memory_usage,
