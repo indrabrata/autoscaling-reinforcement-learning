@@ -5,7 +5,7 @@ from logging import Logger
 import numpy as np
 import urllib3
 
-from .fuzzy import Fuzzy 
+from .fuzzy import Fuzzy
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import pprint
@@ -49,13 +49,14 @@ class QLearningFuzzy:
             response_time = 0
         else:
             response_time = int(response_time_raw)
-        
+
         observation["response_time"] = response_time
         fuzzy_state = self.fuzzy.fuzzify(observation)
         cpu_label = max(fuzzy_state["cpu_usage"], key=fuzzy_state["cpu_usage"].get)
         mem_label = max(fuzzy_state["memory_usage"], key=fuzzy_state["memory_usage"].get)
         resp_label = max(fuzzy_state["response_time"], key=fuzzy_state["response_time"].get)
-        return (cpu_label, mem_label, resp_label)
+        action = int(observation["last_action"])
+        return (cpu_label, mem_label, resp_label, action)
 
     def get_action(self, observation: dict) -> int:
         state_key = self.get_state_key(observation)
