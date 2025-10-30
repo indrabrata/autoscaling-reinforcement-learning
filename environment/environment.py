@@ -194,17 +194,23 @@ class KubernetesEnv:
 
         # --- Adaptive Cost Penalty ---
         replica_ratio = (self.replica_state - self.min_replicas) / self.range_replicas
+        
 
         # Jika response tinggi & replica tinggi → kurangi cost_pen
         if response_time_percentage > 100 and replica_ratio > 0.6:
             # scaling besar tapi response tetap tinggi → penalti biaya dikurangi 50%
-            cost_factor = 0.5
+            cost_factor = 0.7
         elif response_time_percentage > 100 and replica_ratio < 0.3:
             # response tinggi tapi replica rendah → penalti biaya lebih besar
-            cost_factor = 1.5
+            cost_factor = 1.7
         else:
             # normal case
             cost_factor = 1.0
+
+        if response_time_percentage < 80 and 0.3 <= replica_ratio <= 0.6:
+            efficiency_bonus = 0.05  # kecil agar tidak overfit ke efisiensi
+        else:
+            efficiency_bonus = 0.0            
 
         cost_pen = (
             self.cost_weight
@@ -213,7 +219,7 @@ class KubernetesEnv:
         )
 
         # --- Final Reward ---
-        reward = 1.0 - resp_pen - cpu_mem_pen - cost_pen
+        reward = 1.0 - resp_pen - cpu_mem_pen - cost_pen + efficiency_bonus
         reward = max(min(reward, 1.0), -1.0)
 
         return float(reward)
