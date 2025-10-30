@@ -55,8 +55,7 @@ class QLearningFuzzy:
         cpu_label = max(fuzzy_state["cpu_usage"], key=fuzzy_state["cpu_usage"].get)
         mem_label = max(fuzzy_state["memory_usage"], key=fuzzy_state["memory_usage"].get)
         resp_label = max(fuzzy_state["response_time"], key=fuzzy_state["response_time"].get)
-        action = int(observation["last_action"])
-        return (cpu_label, mem_label, resp_label, action)
+        return (cpu_label, mem_label, resp_label)
 
     def get_action(self, observation: dict) -> int:
         state_key = self.get_state_key(observation)
