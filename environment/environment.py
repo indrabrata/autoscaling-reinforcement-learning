@@ -167,6 +167,7 @@ class KubernetesEnv:
     def _calculate_reward(self) -> float:
         response_time_percentage = (self.response_time / self.max_response_time) * 100.0
 
+        # --- CPU penalty ---
         if self.cpu_usage < self.min_cpu:
             cpu_pen = (self.min_cpu - self.cpu_usage) / self.min_cpu
         elif self.cpu_usage > self.max_cpu:
@@ -174,6 +175,7 @@ class KubernetesEnv:
         else:
             cpu_pen = 0.0
 
+        # --- Memory penalty ---
         if self.memory_usage < self.min_memory:
             mem_pen = (self.min_memory - self.memory_usage) / self.min_memory
         elif self.memory_usage > self.max_memory:
@@ -181,22 +183,40 @@ class KubernetesEnv:
         else:
             mem_pen = 0.0
 
-        resp_pen = min(
-            self.response_time_weight,
-            max(0.0, (response_time_percentage - 100.0) / 100.0),
-        )
+        # --- Response time penalty ---
+        if response_time_percentage <= 100.0:
+            resp_pen = 0.0
+        else:
+            resp_pen = min(1.0, (response_time_percentage - 100.0) / 100.0)
 
+        # --- CPU & Memory weighted penalty ---
         cpu_mem_pen = self.cpu_memory_weight * (cpu_pen + mem_pen)
+
+        # --- Adaptive Cost Penalty ---
+        replica_ratio = (self.replica_state - self.min_replicas) / self.range_replicas
+
+        # Jika response tinggi & replica tinggi → kurangi cost_pen
+        if response_time_percentage > 100 and replica_ratio > 0.6:
+            # scaling besar tapi response tetap tinggi → penalti biaya dikurangi 50%
+            cost_factor = 0.5
+        elif response_time_percentage > 100 and replica_ratio < 0.3:
+            # response tinggi tapi replica rendah → penalti biaya lebih besar
+            cost_factor = 1.5
+        else:
+            # normal case
+            cost_factor = 1.0
 
         cost_pen = (
             self.cost_weight
-            * (self.replica_state - self.min_replicas)
-            / self.range_replicas
+            * cost_factor
+            * replica_ratio
         )
 
+        # --- Final Reward ---
         reward = 1.0 - resp_pen - cpu_mem_pen - cost_pen
+        reward = max(min(reward, 1.0), -1.0)
 
-        return float(max(min(reward, 1.0), -1.0))
+        return float(reward)
 
     def _scale_and_get_metrics(self) -> None:
         self._scale()
