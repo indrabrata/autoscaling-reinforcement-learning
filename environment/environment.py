@@ -251,7 +251,9 @@ class KubernetesEnv:
             )
 
     def _get_observation(self) -> dict[str, float]:
-        response_time_percentage = (self.response_time / self.max_response_time) * 100.0
+        response_time_percentage = min(
+            (self.response_time / self.max_response_time) * 100.0, 100.0
+        )
 
         return {
             "cpu_usage": self.cpu_usage,
