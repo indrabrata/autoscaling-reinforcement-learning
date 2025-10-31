@@ -192,8 +192,8 @@ class KubernetesEnv:
         
         if response_time_percentage > 100 and replica_ratio > 0.6:
             cost_factor = 0.3
-        elif response_time_percentage > 100 and replica_ratio < 0.4:
-            cost_factor = 1.5
+        elif response_time_percentage > 100 and replica_ratio <= 0.6:
+            cost_factor = 2
         else:
             cost_factor = 1.0
 
@@ -210,12 +210,22 @@ class KubernetesEnv:
         replica_efficient = 0.3 <= replica_ratio <= 0.6
 
         if cpu_ideal and mem_ideal and resp_ideal and replica_efficient:
-            reward += 0.05  # bonus tambahan
+            reward += 0.05
 
         reward = max(min(reward, 1.0), 0.0)
+        
+        self.logger.info(
+        f"📊 Reward Breakdown | Iter={getattr(self, 'iteration', '?')} | Replicas={self.replica_state}\n"
+        f" ├─ CPU Usage: {self.cpu_usage:.2f}% | Penalty={cpu_pen:.4f}\n"
+        f" ├─ MEM Usage: {self.memory_usage:.2f}% | Penalty={mem_pen:.4f}\n"
+        f" ├─ Response Time: {self.response_time:.2f} ms ({response_time_percentage:.2f}%) | Penalty={resp_pen:.4f}\n"
+        f" ├─ Replica Ratio: {replica_ratio:.3f} | CostFactor={cost_factor:.2f} | CostPen={cost_pen:.4f}\n"
+        f" ├─ CPU+MEM Weighted Penalty: {cpu_mem_pen:.4f}\n"
+        f" ├─ Total Penalty: {total_penalty:.4f}\n"
+        f" └─ ✅ Final Reward: {reward:.4f}"
+    )
 
         return reward
-
 
 
     def _scale_and_get_metrics(self) -> None:

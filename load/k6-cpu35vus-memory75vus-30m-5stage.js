@@ -75,7 +75,7 @@ export function analyzeRequest() {
 }
 
 export function ordersRequest() {
-  const res = http.get(`${BASE_URL}/orders`);
+  const res = http.get(`${BASE_URL}/orders?limit=200&offset=0`);
   check(res, { "orders status 200": (r) => r.status === 200 });
   sleep(0.5 + Math.random() * 0.5);
 }
