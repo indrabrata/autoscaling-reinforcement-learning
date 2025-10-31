@@ -1,3 +1,4 @@
+import math
 import time
 from logging import Logger
 from typing import Optional
@@ -165,6 +166,9 @@ class KubernetesEnv:
         )
 
     def _calculate_reward(self) -> float:
+        if self.response_time is None or math.isnan(self.response_time) or math.isinf(self.response_time):
+            self.response_time = 0.0        
+        
         response_time_percentage = (self.response_time / self.max_response_time) * 100.0
 
         if self.cpu_usage < self.min_cpu:
@@ -190,9 +194,9 @@ class KubernetesEnv:
 
         replica_ratio = (self.replica_state - self.min_replicas) / self.range_replicas
         
-        if response_time_percentage > 100 and replica_ratio > 0.6:
+        if response_time_percentage > 100 and replica_ratio > 0.7:
             cost_factor = 0.3
-        elif response_time_percentage > 100 and replica_ratio <= 0.6:
+        elif response_time_percentage > 100 and replica_ratio <= 0.7:
             cost_factor = 2
         else:
             cost_factor = 1.0
@@ -210,7 +214,7 @@ class KubernetesEnv:
         replica_efficient = 0.3 <= replica_ratio <= 0.6
 
         if cpu_ideal and mem_ideal and resp_ideal and replica_efficient:
-            reward += 0.05
+            reward += 0.01
 
         reward = max(min(reward, 1.0), 0.0)
         
